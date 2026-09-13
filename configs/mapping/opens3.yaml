@@ -1,0 +1,18 @@
+# Vocabulary of the opens3-rebac authorization engine.
+#
+# OWNER_OF and VIEWER are listed because the engine's permission check uses them,
+# even though its gRPC enum currently has no value for them and they cannot be
+# created through the API. See docs/opens3-rebac-findings.md, finding 2.
+relation_mapping:
+  MEMBER_OF:
+    relation: member_of
+  HAS_PERMISSION:
+    relation: has_permission
+    level: from_property
+  PARENT_OF:
+    relation: parent_of
+  OWNER_OF:
+    relation: owner_of
+  VIEWER:
+    relation: has_permission
+    level: read
