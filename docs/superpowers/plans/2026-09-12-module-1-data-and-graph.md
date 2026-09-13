@@ -2674,6 +2674,21 @@ def test_objects_are_attached_to_their_bucket() -> None:
         assert attached, f"{bucket.id} has no objects attached"
 
 
+def test_objects_carry_their_own_permissions() -> None:
+    # The engine does not inherit rights through containment, so the normal
+    # process must grant on objects explicitly. Without this, any object-level
+    # right would look anomalous by itself and the bypass pattern would be
+    # detectable without a model at all.
+    _, events = _journal()
+    with_rights = {
+        event.object
+        for event in events
+        if event.relation is RelationType.HAS_PERMISSION
+        and event.object.startswith("object:")
+    }
+    assert len(with_rights) > 10
+
+
 def test_weekends_are_quieter_than_weekdays() -> None:
     _, events = _journal()
     weekend = sum(1 for event in events if is_weekend(event.ts))
@@ -2793,6 +2808,13 @@ Poisson counts, and the normal procedure for granting a right is always the same
 rights go to the team group, not to individuals. Deviations from that procedure
 exist in the normal data too, at the configured rate, because an organization
 where the procedure is never bypassed is not a realistic baseline.
+
+Objects receive their own permission edges. The target engine does not inherit
+rights through containment — a permission on a bucket does not cover its objects,
+which is a deliberate decision of that project, verified against its test suite —
+so the gateway writes an explicit permission after every upload. Reproducing that
+matters: if the normal graph had no object-level rights, the bypass pattern would
+be detectable by the mere presence of one.
 """
 
 from __future__ import annotations
@@ -2921,9 +2943,22 @@ def _operate(
             if not pending_objects:
                 break
             bucket_id, object_id = pending_objects.pop()
+            ts = sample_time_of_day(rng, start, config)
             events.append(
-                GraphEvent(sample_time_of_day(rng, start, config), EventOp.GRANT,
-                           bucket_id, RelationType.PARENT_OF, object_id, actor="user:system")
+                GraphEvent(ts, EventOp.GRANT, bucket_id, RelationType.PARENT_OF,
+                           object_id, actor="user:system")
+            )
+            # Containment does not carry rights in the target engine: a
+            # permission on a bucket does not cover its objects, and the gateway
+            # writes an explicit one after every upload. The normal graph
+            # therefore carries object-level permissions in bulk, and an
+            # object-level right is not by itself unusual.
+            bucket = org.bucket(bucket_id)
+            events.append(
+                GraphEvent(ts, EventOp.GRANT, org.team(bucket.team).group_id,
+                           RelationType.HAS_PERMISSION, object_id,
+                           _TEAM_LEVELS[int(rng.integers(len(_TEAM_LEVELS)))],
+                           actor=bucket.owner)
             )
 
         for _ in range(int(rng.poisson(config.grants_per_day * scale))):
@@ -3906,8 +3941,8 @@ def test_hierarchy_bypass_grants_on_an_object_not_its_bucket(context_factory) ->
 
     assert entity_type(event.object) is EntityType.OBJECT
     assert event.relation is RelationType.HAS_PERMISSION
-    # The subject has no right on the containing bucket, which is what the
-    # standard procedure would have granted first.
+    # Object-level rights are ordinary; holding one with nothing on the
+    # containing bucket is not.
     assert level_on(context.graph, event.subject, parent_bucket(event.object)) is (
         PermissionLevel.NONE
     )
@@ -3995,9 +4030,11 @@ from rga.generator.anomalies.base import (
 class HierarchyBypass:
     """A right on an object, granted to someone with no right on its bucket.
 
-    The standard procedure grants at bucket level and lets containment carry the
-    right down. An edge that lands straight on a leaf, to a subject with nothing
-    above it, has skipped that path.
+    Object-level rights are ordinary here — the engine does not inherit through
+    containment, so every upload produces one. What is not ordinary is who holds
+    it: normally the right goes to the group that owns the containing bucket, and
+    whoever holds it on the object holds something on the bucket too. This edge
+    lands on a leaf, held by a subject with nothing above it.
     """
 
     name = "hierarchy_bypass"
