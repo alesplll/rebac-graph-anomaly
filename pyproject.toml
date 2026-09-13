@@ -1,0 +1,69 @@
+[build-system]
+requires = ["hatchling>=1.24"]
+build-backend = "hatchling.build"
+
+[project]
+name = "rga"
+version = "0.1.0"
+description = "Anomaly detection in ReBAC access graphs"
+requires-python = "==3.12.*"
+dependencies = [
+    "numpy>=1.26",
+    "scipy>=1.11",
+    "networkx>=3.2",
+    "pyyaml>=6.0",
+]
+
+[project.optional-dependencies]
+cpu = ["torch>=2.7"]
+gpu = ["torch>=2.7"]
+neo4j = ["neo4j>=5.0"]
+kafka = ["confluent-kafka>=2.5"]
+ml = ["scikit-learn>=1.4"]
+service = ["fastapi>=0.110", "uvicorn[standard]>=0.29"]
+
+[project.scripts]
+rga = "rga.cli.main:main"
+
+[dependency-groups]
+dev = ["pytest>=8.0", "pytest-cov>=5.0", "ruff>=0.6"]
+
+# Torch ships per-accelerator wheels on its own indexes. `explicit = true` means
+# nothing is pulled from them unless a source below points at them by name.
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[[tool.uv.index]]
+name = "pytorch-cu128"
+url = "https://download.pytorch.org/whl/cu128"
+explicit = true
+
+[tool.uv.sources]
+torch = [
+    { index = "pytorch-cpu", extra = "cpu" },
+    { index = "pytorch-cu128", extra = "gpu" },
+]
+
+# The laptop installs `cpu`, the training PC installs `gpu`; never both.
+[tool.uv]
+conflicts = [[{ extra = "cpu" }, { extra = "gpu" }]]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/rga"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+markers = [
+    "integration: requires external services (run with -m integration)",
+    "gpu: requires a CUDA device",
+]
+
+[tool.ruff]
+line-length = 100
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "UP", "B", "SIM", "RUF"]
