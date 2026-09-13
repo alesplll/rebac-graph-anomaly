@@ -90,6 +90,20 @@ class FeatureMatrix:
             [index for index, own in enumerate(self.block.groups) if own is group], dtype=np.int64
         )
 
+    def column(self, name: str) -> np.ndarray:
+        """One feature's values across all rows, by name."""
+        return self.values[:, self._position(name)]
+
+    def observed(self, name: str) -> np.ndarray:
+        """Whether one feature was observed, across all rows, by name."""
+        return self.mask[:, self._position(name)]
+
+    def _position(self, name: str) -> int:
+        try:
+            return self.block.names.index(name)
+        except ValueError:
+            raise KeyError(f"no such feature: {name!r}") from None
+
     def with_groups(self, groups: tuple[FeatureGroup, ...]) -> FeatureMatrix:
         """A matrix restricted to the named groups, for the ablation study."""
         wanted = set(groups)

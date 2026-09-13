@@ -93,3 +93,15 @@ def test_candidate_set_exposes_binary_truth() -> None:
     )
     assert candidates.n_candidates == 2
     assert candidates.y_true().tolist() == [0, 1]
+
+
+def test_column_and_observed_look_up_by_name() -> None:
+    matrix = FeatureMatrix(
+        values=np.arange(6, dtype=np.float32).reshape(2, 3),
+        mask=np.array([[True, False, True], [True, True, True]]),
+        block=_block(),
+    )
+    assert matrix.column("age").tolist() == [1.0, 4.0]
+    assert matrix.observed("age").tolist() == [False, True]
+    with pytest.raises(KeyError, match="no such feature"):
+        matrix.column("nope")
