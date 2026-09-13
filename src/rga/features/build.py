@@ -29,6 +29,17 @@ class Span(StrEnum):
     EVAL = "eval"
 
 
+#: Principals whose changes are platform automation rather than decisions. The
+#: permission an engine writes on an object as part of an upload is not something
+#: a person chose and is not worth an analyst's attention; scoring it is like
+#: scoring a log line. It also swamps the candidate set — half the window would be
+#: "a right on an object created an instant ago", and the age of the target would
+#: separate normal from anomalous on its own.
+#:
+#: An integrator names their own automation principals here; the default matches
+#: what the generator emits.
+AUTOMATION_ACTORS = frozenset({"user:system"})
+
 #: Days at the start of the journal excluded from training candidates. Day zero
 #: founds the organization in one burst against an empty graph, and those rows
 #: describe no structure at all.
@@ -65,6 +76,7 @@ def build_candidates(
     *,
     static_seed: int = 0,
     warmup_days: int = WARMUP_DAYS,
+    automation_actors: frozenset[str] = AUTOMATION_ACTORS,
 ) -> CandidateSet:
     """Extract features for every grant inside the requested span."""
     static = compute_static_attributes(
@@ -85,7 +97,12 @@ def build_candidates(
     patterns: list[str] = []
 
     for event in dataset.events:
-        if event.op is EventOp.GRANT and start <= event.ts < end:
+        is_candidate = (
+            event.op is EventOp.GRANT
+            and start <= event.ts < end
+            and event.actor not in automation_actors
+        )
+        if is_candidate:
             values, mask = _candidate_row(context, static, event)
             keys.append(event.edge_key())
             stamps.append(event.ts)

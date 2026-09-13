@@ -16,8 +16,7 @@ from rga.generator.anomalies.base import (
     label_for,
     pick,
     register,
-    sample_night_ts,
-    sample_ts,
+    sample_maybe_night_ts,
 )
 from rga.util.timeutil import HOUR_MS, MINUTE_MS
 
@@ -47,7 +46,7 @@ class ShadowGroup:
         owner = pick(context.rng, users)
         group_id = f"group:svc-{int(context.rng.integers(1 << 32)):08x}"
         window_start, window_end = context.window
-        start = sample_night_ts(context.rng, (window_start, window_end - HOUR_MS))
+        start = sample_maybe_night_ts(context.rng, (window_start, window_end - HOUR_MS))
 
         events = [
             GraphEvent(
@@ -108,7 +107,7 @@ class DelegationCascade:
         order = context.rng.permutation(len(users))[:_CHAIN_LENGTH]
         chain = [users[int(index)].id for index in order]
         bucket = pick(context.rng, context.org.buckets).id
-        start = sample_ts(context.rng, (window_start, window_end - span))
+        start = sample_maybe_night_ts(context.rng, (window_start, window_end - span))
 
         events = []
         actor = chain[0]

@@ -19,8 +19,7 @@ from rga.generator.anomalies.base import (
     level_on,
     pick,
     register,
-    sample_night_ts,
-    sample_ts,
+    sample_maybe_night_ts,
 )
 
 
@@ -50,7 +49,7 @@ class SelfGrantAdmin:
                 continue
 
             event = GraphEvent(
-                ts=sample_night_ts(context.rng, context.window),
+                ts=sample_maybe_night_ts(context.rng, context.window),
                 op=EventOp.GRANT,
                 subject=user.id,
                 relation=RelationType.HAS_PERMISSION,
@@ -88,7 +87,7 @@ class PrivilegedGroupJoin:
                 continue
 
             event = GraphEvent(
-                ts=sample_ts(context.rng, context.window),
+                ts=sample_maybe_night_ts(context.rng, context.window),
                 op=EventOp.GRANT,
                 subject=user.id,
                 relation=RelationType.MEMBER_OF,

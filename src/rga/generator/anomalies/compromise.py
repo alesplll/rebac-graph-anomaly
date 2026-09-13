@@ -19,8 +19,7 @@ from rga.generator.anomalies.base import (
     level_on,
     pick,
     register,
-    sample_night_ts,
-    sample_ts,
+    sample_maybe_night_ts,
 )
 from rga.util.timeutil import DAY_MS, MINUTE_MS
 
@@ -55,7 +54,7 @@ class GrantBurst:
                 int(context.rng.integers(_BURST_SIZE[0], _BURST_SIZE[1] + 1)), len(foreign)
             )
             order = context.rng.permutation(len(foreign))[:count]
-            start = sample_ts(context.rng, (window_start, window_end - _BURST_SPAN_MS))
+            start = sample_maybe_night_ts(context.rng, (window_start, window_end - _BURST_SPAN_MS))
 
             events = [
                 GraphEvent(
@@ -101,7 +100,7 @@ class DormantAwakening:
                 continue
 
             event = GraphEvent(
-                ts=sample_night_ts(context.rng, context.window),
+                ts=sample_maybe_night_ts(context.rng, context.window),
                 op=EventOp.GRANT,
                 subject=user.id,
                 relation=RelationType.HAS_PERMISSION,

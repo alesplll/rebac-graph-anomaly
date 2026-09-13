@@ -21,7 +21,7 @@ timeline:
   weekend_rate: 0.08
   hires_per_day: 0.8
   departures_per_day: 0.3
-  grants_per_day: 12.0
+  grants_per_day: 260.0
   uploads_per_day: 60.0
 
 anomalies:

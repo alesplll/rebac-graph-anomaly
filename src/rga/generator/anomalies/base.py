@@ -144,6 +144,48 @@ def sample_night_ts(rng: np.random.Generator, window: tuple[int, int]) -> int:
     return int(min(max(ts, start), end - 1))
 
 
+#: Working hours of the modelled organization, matching the generator.
+_WORKING_HOURS = (9, 19)
+#: Share of ordinary activity that still falls outside them.
+_OFF_HOURS_RATE = 0.05
+
+
+def sample_business_ts(rng: np.random.Generator, window: tuple[int, int]) -> int:
+    """A moment inside the window, drawn the way ordinary activity is drawn.
+
+    `sample_ts` is uniform across the clock, which is not what normal traffic
+    looks like: it concentrates in working hours. An incident timed uniformly
+    would therefore sit outside working hours well over half the time and be
+    separable by the clock alone, without any of its structure mattering.
+    """
+    start, end = window
+    day_count = max(1, (end - start) // DAY_MS)
+    midnight = start - (start % DAY_MS) + int(rng.integers(day_count)) * DAY_MS
+
+    low, high = _WORKING_HOURS
+    if rng.random() < _OFF_HOURS_RATE:
+        off_hours = [hour for hour in range(24) if not low <= hour < high]
+        hour = int(off_hours[int(rng.integers(len(off_hours)))])
+    else:
+        hour = int(rng.integers(low, high))
+
+    ts = midnight + hour * HOUR_MS + int(rng.integers(60)) * MINUTE_MS
+    return int(min(max(ts, start), end - 1))
+
+
+def sample_maybe_night_ts(
+    rng: np.random.Generator, window: tuple[int, int], *, night_share: float = 0.35
+) -> int:
+    """Night for some incidents, ordinary working hours for the rest.
+
+    An attack that always happens at three in the morning is separable by the
+    clock alone. Real ones do not schedule themselves so conveniently.
+    """
+    if rng.random() < night_share:
+        return sample_night_ts(rng, window)
+    return sample_business_ts(rng, window)
+
+
 def level_on(graph: AccessGraph, subject_id: str, object_id: str) -> PermissionLevel:
     """Highest permission the subject holds directly on the object."""
     if subject_id not in graph.node_index or object_id not in graph.node_index:

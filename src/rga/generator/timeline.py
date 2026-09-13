@@ -34,6 +34,20 @@ _TEAM_LEVELS = (PermissionLevel.READ, PermissionLevel.WRITE, PermissionLevel.CRE
 #: Identity used for changes the platform itself performs.
 _SYSTEM = "user:system"
 
+#: Share of ordinary grants that land on an already-uploaded object rather than a
+#: bucket. Without these, every object-level right in the journal would be issued
+#: at the instant its object appeared, and the age of the target would separate
+#: normal traffic from anomalies on its own — an artefact of the simulation, not a
+#: property of access graphs. Found by the Module 2 baselines: an isolation forest
+#: reached 0.995 ROC-AUC on it before this existed.
+_OBJECT_GRANT_SHARE = 0.35
+
+#: Share of ordinary grants a resource owner issues to themselves. Owners raising
+#: their own level on something they own is routine. Without it no normal grant
+#: ever has actor == subject, and that single flag would separate most anomaly
+#: patterns from the rest of the journal without any model at all.
+_SELF_GRANT_SHARE = 0.12
+
 
 def generate_normal_journal(
     org: Organization,
@@ -145,7 +159,13 @@ def _operate(
     queue = list(newcomers)
     pending_objects = [(bucket.id, obj) for bucket in org.buckets for obj in bucket.objects]
     rng.shuffle(pending_objects)  # type: ignore[arg-type]
-    direct_grants: set[tuple[str, str]] = set()
+    uploaded: list[tuple[str, str]] = []
+    # Subject, target and the moment the right was granted. The timestamp is not
+    # decoration: a day's phases run in order but each event draws its own time
+    # within the day, so a grant made at 21:00 can be recorded before a departure
+    # drawn at 14:00 of the same day. Revoking it would put the revoke before its
+    # own grant once the journal is sorted.
+    direct_grants: set[tuple[str, str, int]] = set()
 
     for day in range(1, config.days):
         start = day_start(config.start_ts, day)
@@ -171,6 +191,7 @@ def _operate(
             if not pending_objects:
                 break
             bucket_id, object_id = pending_objects.pop()
+            uploaded.append((bucket_id, object_id))
             ts = sample_time_of_day(rng, start, config)
             events.append(
                 GraphEvent(
@@ -186,17 +207,19 @@ def _operate(
                     RelationType.HAS_PERMISSION,
                     object_id,
                     _TEAM_LEVELS[int(rng.integers(len(_TEAM_LEVELS)))],
-                    actor=bucket.owner,
+                    # The platform writes this as part of the upload; nobody
+                    # decided it, so it is attributed to the system.
+                    actor=_SYSTEM,
                 )
             )
 
         for _ in range(int(rng.poisson(config.grants_per_day * scale))):
-            grant = _draw_grant(org, present, config, rng, start, exception_rate)
+            grant = _draw_grant(org, present, uploaded, config, rng, start, exception_rate)
             if grant is None:
                 continue
             events.append(grant)
             if grant.subject.startswith("user:"):
-                direct_grants.add((grant.subject, grant.object))
+                direct_grants.add((grant.subject, grant.object, grant.ts))
 
         for _ in range(int(rng.poisson(config.departures_per_day * scale))):
             if not present:
@@ -213,24 +236,33 @@ def _operate(
                     actor=_SYSTEM,
                 )
             )
-            for subject, target in sorted(pair for pair in direct_grants if pair[0] == leaver):
+            # One revoke per edge, not per grant: the same right may have been
+            # granted more than once, and a second revoke would hit an edge that
+            # is no longer live.
+            held = sorted(
+                {pair[1] for pair in direct_grants if pair[0] == leaver and pair[2] < ts}
+            )
+            for target in held:
                 events.append(
                     GraphEvent(
                         ts,
                         EventOp.REVOKE,
-                        subject,
+                        leaver,
                         RelationType.HAS_PERMISSION,
                         target,
                         actor=_SYSTEM,
                     )
                 )
-                direct_grants.discard((subject, target))
+            direct_grants = {
+                pair for pair in direct_grants if not (pair[0] == leaver and pair[1] in held)
+            }
             present.discard(leaver)
 
 
 def _draw_grant(
     org: Organization,
     present: set[str],
+    uploaded: list[tuple[str, str]],
     config: TimelineConfig,
     rng: np.random.Generator,
     day_start_ts: int,
@@ -239,13 +271,31 @@ def _draw_grant(
     """One right granted by the normal procedure, or a legitimate exception.
 
     The procedure grants to the team group. The exception grants directly to a
-    person, sometimes across departments — rare, but normal.
+    person, sometimes across departments — rare, but normal. Either can land on a
+    bucket or on an object that was uploaded some time ago.
     """
     if not present:
         return None
     ts = sample_time_of_day(rng, day_start_ts, config)
-    bucket = org.buckets[int(rng.integers(len(org.buckets)))]
+
+    if uploaded and rng.random() < _OBJECT_GRANT_SHARE:
+        bucket_id, target = uploaded[int(rng.integers(len(uploaded)))]
+        bucket = org.bucket(bucket_id)
+    else:
+        bucket = org.buckets[int(rng.integers(len(org.buckets)))]
+        target = bucket.id
     approver = bucket.owner
+
+    if rng.random() < _SELF_GRANT_SHARE and bucket.owner in present:
+        return GraphEvent(
+            ts,
+            EventOp.GRANT,
+            bucket.owner,
+            RelationType.HAS_PERMISSION,
+            target,
+            _TEAM_LEVELS[int(rng.integers(len(_TEAM_LEVELS)))],
+            actor=bucket.owner,
+        )
 
     if rng.random() >= exception_rate:
         return GraphEvent(
@@ -253,7 +303,7 @@ def _draw_grant(
             EventOp.GRANT,
             org.team(bucket.team).group_id,
             RelationType.HAS_PERMISSION,
-            bucket.id,
+            target,
             _TEAM_LEVELS[int(rng.integers(len(_TEAM_LEVELS)))],
             actor=approver,
         )
@@ -265,7 +315,7 @@ def _draw_grant(
         EventOp.GRANT,
         subject,
         RelationType.HAS_PERMISSION,
-        bucket.id,
+        target,
         PermissionLevel.READ,
         actor=approver,
     )
