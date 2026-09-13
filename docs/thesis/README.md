@@ -8,6 +8,13 @@
 |---|---|---|
 | `baselines.md` | Сравнение бейзлайнов, пять сидов, среднее и отклонение | `uv run rga evaluate --config configs/experiments/baselines.yaml --out experiments/runs/baselines` |
 | `ablation.md` | Вклад групп признаков; он же руководство по интеграции из раздела 12 | `uv run rga evaluate --config configs/experiments/ablation.yaml --out experiments/runs/ablation` |
+| `dataset.md` | Характеристики обоих наборов данных: размеры, состав, распределение аномалий | `uv run python scripts/thesis_tables.py` |
+| `features.md` | Полный перечень 70 признаков с группами | `uv run python scripts/thesis_tables.py` |
+
+Сюда же относятся два документа уровнем выше: `docs/dataset-calibration.md` —
+артефакты синтетики, найденные измерением, и `docs/opens3-rebac-findings.md` —
+замечания к движку авторизации, сделанные по ходу работы. Оба содержат материал,
+которому место в тексте работы.
 
 ## Как читать таблицу вклада групп
 

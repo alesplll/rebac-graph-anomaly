@@ -67,3 +67,7 @@ src = ["src", "tests"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "N", "UP", "B", "SIM", "RUF"]
+# Report output and documentation are in Russian by design. The ambiguous-unicode
+# rules exist to catch Cyrillic look-alikes smuggled into Latin-script code and
+# produce nothing but noise here.
+ignore = ["RUF001", "RUF002", "RUF003"]
