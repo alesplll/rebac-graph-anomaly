@@ -1,4 +1,9 @@
 # Fast configuration used by tests and by a first end-to-end run.
+#
+# Object counts and upload intensity are sized so that the evaluation window
+# still carries a few hundred ordinary grants. One incident of every configured
+# pattern is roughly thirty edges, so a quieter window would make anomalies the
+# majority of it and every measured rate meaningless.
 name: small
 seed: 20260912
 eval_window_days: 7
@@ -8,7 +13,7 @@ org:
   teams_per_department: [2, 3]
   users_per_team: [3, 6]
   projects_per_team: [1, 2]
-  objects_per_bucket: [5, 30]
+  objects_per_bucket: [200, 400]
   cross_cutting_groups: 1
   cross_cutting_membership_rate: 0.08
   legitimate_exception_rate: 0.04
@@ -21,8 +26,8 @@ timeline:
   weekend_rate: 0.08
   hires_per_day: 0.5
   departures_per_day: 0.15
-  grants_per_day: 4.0
-  uploads_per_day: 20.0
+  grants_per_day: 10.0
+  uploads_per_day: 50.0
 
 anomalies:
   patterns:
