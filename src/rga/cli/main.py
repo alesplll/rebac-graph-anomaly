@@ -22,6 +22,10 @@ def _parser() -> argparse.ArgumentParser:
     stats = commands.add_parser("stats", help="summarise a dataset")
     stats.add_argument("--dataset", type=Path, required=True)
 
+    evaluate = commands.add_parser("evaluate", help="run baselines and write results")
+    evaluate.add_argument("--config", type=Path, required=True)
+    evaluate.add_argument("--out", type=Path, required=True)
+
     return parser
 
 
@@ -41,6 +45,19 @@ def main(argv: list[str] | None = None) -> int:
 
     if arguments.command == "stats":
         print(format_stats(dataset_stats(load_dataset(arguments.dataset))))
+        return 0
+
+    if arguments.command == "evaluate":
+        from rga.eval.experiment import (
+            format_results_table,
+            load_experiment_config,
+            run_experiment,
+            save_results,
+        )
+
+        result = run_experiment(load_experiment_config(arguments.config))
+        save_results(arguments.out, result)
+        print(format_results_table(result))
         return 0
 
     return 2

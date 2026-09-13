@@ -1,0 +1,8 @@
+# One seed, one scorer. Exists so the command line can be tested on every commit
+# without running the real comparison.
+name: smoke
+dataset: configs/generator/small.yaml
+seeds: [1]
+scorers:
+  - rules
+ks: [20]

@@ -1,0 +1,9 @@
+# The comparison that has to exist before any neural result is believable.
+name: baselines
+dataset: configs/generator/small.yaml
+seeds: [1, 2, 3, 4, 5]
+scorers:
+  - rules
+  - isolation_forest
+  - lof
+ks: [20, 50, 100]
