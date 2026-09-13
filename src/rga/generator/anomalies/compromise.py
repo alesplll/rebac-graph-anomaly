@@ -1,0 +1,1 @@
+"""Anomaly patterns: compromise."""
