@@ -6,8 +6,10 @@ import numpy as np
 
 from rga.baselines.base import Scorer, dense_matrix
 from rga.baselines.rules import RuleScorer
+from rga.eval.experiment import restrict_candidates
 from rga.eval.metrics import evaluate_ranking
 from rga.features.build import Span, build_candidates
+from rga.features.spec import FeatureGroup
 from rga.generator.config import load_dataset_config
 from rga.generator.dataset import build_dataset
 
@@ -69,3 +71,14 @@ def test_dense_matrix_zeroes_unobserved_and_appends_group_coverage() -> None:
     assert dense.shape[0] == candidates.n_candidates
     assert dense.shape[1] == candidates.matrix.n_features + 3
     assert np.isfinite(dense).all()
+
+
+def test_rules_survive_a_source_without_provenance() -> None:
+    # A level-0 engine supplies no timestamps and no initiator. Conditions that
+    # rest on them cannot fire, but the scorer must still produce a ranking.
+    candidates = restrict_candidates(_candidates(Span.EVAL), (FeatureGroup.STRUCTURAL,))
+    scores = RuleScorer().score(candidates)
+
+    assert scores.shape == (candidates.n_candidates,)
+    assert np.isfinite(scores).all()
+    assert float(scores.max()) <= 1.0

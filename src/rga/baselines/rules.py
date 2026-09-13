@@ -15,7 +15,7 @@ from __future__ import annotations
 import numpy as np
 
 from rga.domain.relations import PermissionLevel
-from rga.features.spec import CandidateSet
+from rga.features.spec import CandidateSet, FeatureMatrix
 
 #: Condition name to weight. Weights are deliberately round numbers.
 _WEIGHTS = {
@@ -34,6 +34,25 @@ _ELEVATED = float(PermissionLevel.WRITE) / float(PermissionLevel.ADMIN)
 _BIG_JUMP = 2.0 / float(PermissionLevel.ADMIN)
 
 
+def _values(matrix: FeatureMatrix, name: str) -> np.ndarray:
+    """A feature's values, or zeros when the source does not supply it.
+
+    Under a restricted feature set — a level-0 engine that records no timestamps,
+    say — a condition resting on an absent feature cannot fire. Silence is the
+    honest answer; raising would make the ablation study impossible to run.
+    """
+    if name not in matrix.block.names:
+        return np.zeros(matrix.n_rows, dtype=np.float64)
+    return matrix.column(name).astype(np.float64)
+
+
+def _is_observed(matrix: FeatureMatrix, name: str) -> np.ndarray:
+    """Whether a feature was observed, or all-false when it is absent entirely."""
+    if name not in matrix.block.names:
+        return np.zeros(matrix.n_rows, dtype=bool)
+    return matrix.observed(name)
+
+
 class RuleScorer:
     """Weighted sum of hand-written conditions, rescaled to [0, 1]."""
 
@@ -48,20 +67,20 @@ class RuleScorer:
         # A condition resting on an unobserved feature must not fire. Silence is
         # the honest answer when the source cannot tell us.
         self_grant = (
-            matrix.column("actor_is_subject")
-            * matrix.observed("actor_is_subject")
-            * (matrix.column("level_ordinal") >= _ELEVATED)
+            _values(matrix, "actor_is_subject")
+            * _is_observed(matrix, "actor_is_subject")
+            * (_values(matrix, "level_ordinal") >= _ELEVATED)
         )
-        bypass = matrix.column("bypasses_bucket") * matrix.observed("bypasses_bucket")
+        bypass = _values(matrix, "bypasses_bucket") * _is_observed(matrix, "bypasses_bucket")
 
         conditions = {
             "self_grant_elevated": self_grant,
             "bypasses_bucket": bypass,
-            "big_level_jump": (matrix.column("level_jump") >= _BIG_JUMP).astype(np.float64),
-            "structurally_isolated": matrix.column("path_unreachable"),
-            "off_hours": matrix.column("is_off_hours"),
-            "weekend": matrix.column("is_weekend"),
-            "new_subject": matrix.column("subj_is_new"),
+            "big_level_jump": (_values(matrix, "level_jump") >= _BIG_JUMP).astype(np.float64),
+            "structurally_isolated": _values(matrix, "path_unreachable"),
+            "off_hours": _values(matrix, "is_off_hours"),
+            "weekend": _values(matrix, "is_weekend"),
+            "new_subject": _values(matrix, "subj_is_new"),
         }
 
         total = np.zeros(matrix.n_rows, dtype=np.float64)

@@ -1,0 +1,15 @@
+# Which feature groups carry the signal — and, read the other way, what an
+# authorization engine at each capability level can deliver. See section 12 of
+# the design document.
+name: ablation
+dataset: configs/generator/small.yaml
+seeds: [1, 2, 3, 4, 5]
+scorers:
+  - rules
+  - isolation_forest
+  - lof
+ks: [20, 50, 100]
+feature_groups:
+  - [structural]                             # level 0: a bare snapshot of tuples
+  - [structural, temporal]                   # level 1: plus creation timestamps
+  - [structural, temporal, provenance]       # level 2: plus the initiator
