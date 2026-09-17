@@ -65,6 +65,30 @@ def candidate_arrays(
     )
 
 
+def without_features(arrays: CandidateArrays) -> CandidateArrays:
+    """The same candidates with an empty context row.
+
+    The self-supervised objective gives a positive and its corrupted negatives the
+    same feature row, so no gradient ever distinguishes those inputs and the head's
+    weights on them stay where initialisation left them. At scoring time the row
+    varies from candidate to candidate and those untrained weights feed the logit
+    noise. Measured over five seeds on small-history: keeping the row scored
+    0.073 +/- 0.043 PR-AUC, dropping it 0.368 +/- 0.235.
+
+    The consequence is worth stating plainly: the self-supervised network reads
+    structure alone, which is capability level 0 — the minimum any ReBAC engine
+    offers. The context row still reaches the supervised variant, where positives
+    and negatives differ in it and its weights do get trained.
+    """
+    return CandidateArrays(
+        src=arrays.src,
+        dst=arrays.dst,
+        relation=arrays.relation,
+        level=arrays.level,
+        features=np.zeros((len(arrays.src), 0), dtype=np.float32),
+    )
+
+
 def edge_positions(
     graph: AccessGraph, src: np.ndarray, dst: np.ndarray, relation: np.ndarray
 ) -> np.ndarray:

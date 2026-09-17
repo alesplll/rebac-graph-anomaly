@@ -4,6 +4,11 @@ Fitting trains the model on the training span and records the distributions the 
 transform needs. Scoring propagates over the whole graph at the split — the edges
 held out during training were held out to stop honestly, not to be thrown away — and
 combines the three terms of spec section 3.
+
+The candidate context row is deliberately withheld from this scorer; see
+`rga.nn.candidates.without_features` for the measurement that settled it. What
+remains is a structural detector that needs nothing but a snapshot of the relation
+tuples, which is what every ReBAC engine can supply.
 """
 
 from __future__ import annotations
@@ -12,7 +17,7 @@ import numpy as np
 import torch
 
 from rga.features.spec import CandidateSet
-from rga.nn.candidates import CandidateArrays, candidate_arrays
+from rga.nn.candidates import CandidateArrays, candidate_arrays, without_features
 from rga.nn.config import ModelConfig
 from rga.nn.graph_tensors import graph_tensors
 from rga.nn.node_inputs import node_input_features
@@ -49,6 +54,7 @@ class GnnScorer:
             raise ValueError("the candidate set carries no graph; the network needs one")
 
         arrays, mean, std = candidate_arrays(train)
+        arrays = without_features(arrays)
         self._mean, self._std = mean, std
         self._model = train_model(
             train.graph, arrays, self._config, seed=self._seed, device=self._device
@@ -71,7 +77,7 @@ class GnnScorer:
             raise RuntimeError("the gnn scorer must be fit before scoring")
 
         arrays, _, _ = candidate_arrays(candidates, mean=self._mean, std=self._std)
-        unlikeliness = self._likelihood_rank.apply(1.0 - self._likelihood(arrays))
+        unlikeliness = self._likelihood_rank.apply(1.0 - self._likelihood(without_features(arrays)))
         return combine(unlikeliness, self._node_rank(arrays.src), self._node_rank(arrays.dst))
 
     def _likelihood(self, arrays: CandidateArrays) -> np.ndarray:
