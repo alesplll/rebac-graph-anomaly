@@ -76,6 +76,10 @@ def build_scorer(name: str, seed: int) -> Scorer:
         from rga.nn.supervised import SupervisedGnnScorer
 
         return SupervisedGnnScorer(seed=seed)
+    if name == "gnn_forest":
+        from rga.nn.hybrid import GnnAugmentedForestScorer
+
+        return GnnAugmentedForestScorer(seed=seed)
     raise KeyError(f"unknown scorer: {name!r}")
 
 
