@@ -38,19 +38,50 @@ Python 3.12 through `uv`. The `cpu` and `gpu` extras conflict; install one.
 uv sync --extra cpu --extra service --extra ml --extra neo4j
 ```
 
-## Run
+## Run the service on synthetic data
+
+Train the model once — `artifacts/` is not in the repository because it is
+reproducible from its recipe — then start the service.
+
+```bash
+uv run rga train --config configs/train/gnn-supervised.yaml --out artifacts/gnn-supervised
+uv run rga serve --config configs/service/synthetic.yaml
+```
+
+Open http://127.0.0.1:8000. Training takes a few minutes; startup takes about twenty
+seconds, because the service generates the dataset, extracts candidates and scores
+them before it answers. `--port` moves it off 8000.
+
+## Run the service against a live opens3-rebac
+
+Same code, same artefact; only the configuration differs. Neo4j must be the one the
+authorization engine writes to, and its graph has to carry edge timestamps — that is
+capability level 1, without which there is no change log to score.
+
+```bash
+# 1. the engine's database, from the branch that records timestamps and actors
+cd ../opens3-rebac && git checkout feat/graph-timestamps
+docker compose up -d --wait neo4j
+
+# 2. a populated graph: on an empty one every change looks unusual
+cd ../rebac-graph-anomaly
+uv run python scripts/fill_live_graph.py --config configs/generator/small-history.yaml
+
+# 3. the service, pointed at Neo4j instead of the generator
+uv run rga serve --config configs/service/opens3.yaml
+```
+
+The status line should read source `neo4j` and capability level 2. Grant a permission
+through the engine, press Refresh, and the change appears in the queue.
+
+Connection details live in `configs/service/opens3.yaml`: `uri`, `user`, `password`,
+and the relation mapping. Edit that file for a different deployment.
+
+## Other commands
 
 ```bash
 uv run rga generate --config configs/generator/small.yaml --out data/small
 uv run rga evaluate --config configs/experiments/gnn.yaml --out experiments/runs/gnn
-uv run rga train --config configs/train/gnn-supervised.yaml --out artifacts/gnn-supervised
-uv run rga serve --config configs/service/synthetic.yaml       # http://127.0.0.1:8000
-```
-
-Pointing the service at a live engine is a configuration swap to
-`configs/service/opens3.yaml`; no code changes.
-
-```bash
 uv run pytest -m "not integration and not gpu"
 uv run ruff check .
 ```
