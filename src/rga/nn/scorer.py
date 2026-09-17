@@ -117,6 +117,20 @@ class GnnScorer:
             self._node_rank(deviation, arrays.dst),
         )
 
+    def margins(self, candidates: CandidateSet) -> np.ndarray:
+        """Unlikeliness before the rank transform, for explanation to work with.
+
+        The ranked score is a step function of the reference distribution, so two
+        neighbouring candidates can share a rank; the quantity behind it does not.
+        """
+        if self._model is None:
+            raise RuntimeError("the gnn scorer must be fit before scoring")
+        if candidates.graph is None:
+            raise ValueError("the candidate set carries no graph; the network needs one")
+        state, _ = self._encode(candidates.graph)
+        arrays, _, _ = candidate_arrays(candidates, mean=self._mean, std=self._std)
+        return 1.0 - self._likelihood(state, without_features(arrays))
+
     def feature_gradients(self, candidates: CandidateSet, position: int) -> np.ndarray | None:
         """None: this scorer reads structure only, so no feature moved the score."""
         return None

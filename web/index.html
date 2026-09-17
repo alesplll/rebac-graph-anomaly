@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Обзор изменений прав доступа</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header>
+    <div>
+      <h1>Обзор изменений прав доступа</h1>
+      <p id="status">Загрузка…</p>
+    </div>
+    <button id="refresh" type="button">Обновить</button>
+  </header>
+
+  <section id="filters">
+    <label>Субъект <input id="filter-subject" type="text" placeholder="user:…"></label>
+    <label>Отношение
+      <select id="filter-relation">
+        <option value="">любое</option>
+        <option>HAS_PERMISSION</option>
+        <option>MEMBER_OF</option>
+        <option>PARENT_OF</option>
+        <option>OWNER_OF</option>
+      </select>
+    </label>
+    <button id="apply" type="button">Применить</button>
+    <span id="counter"></span>
+  </section>
+
+  <main>
+    <ol id="queue"></ol>
+    <article id="card">
+      <p class="hint">Выберите изменение из списка слева — система покажет, что в нём
+        необычного и на какие связи она при этом опиралась.</p>
+    </article>
+  </main>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

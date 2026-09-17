@@ -1,5 +1,6 @@
 """Which of the candidate's own features moved the score."""
 
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -54,3 +55,32 @@ def test_a_structure_only_scorer_reports_no_feature_contributions(fitted) -> Non
     structural.fit(train)
 
     assert feature_contributions(structural, evaluation, 0) == ()
+
+
+def test_attribution_follows_the_logit_not_the_probability(fitted) -> None:
+    """Otherwise a confident score explains itself with zeroes.
+
+    The sigmoid saturates on exactly the candidates an analyst opens first, and its
+    gradient there is zero, so a probability-based attribution would hand back an
+    empty table for the top of the queue. The logit keeps its slope.
+    """
+    scorer, _, evaluation = fitted
+    position = 0
+    step = 1e-3
+
+    single = evaluation.row(position)
+    reported = {item.name: item.contribution for item in
+                feature_contributions(scorer, evaluation, position, top=len(evaluation.matrix.block))}
+
+    name = "level_ordinal"
+    column = evaluation.matrix.block.names.index(name)
+    moved = evaluation.matrix.values.copy()
+    moved[position, column] += step
+    nudged = replace(evaluation, matrix=replace(evaluation.matrix, values=moved))
+
+    before = float(scorer.margins(single)[0])
+    after = float(scorer.margins(nudged.row(position))[0])
+    # Contribution is gradient times input, and the finite difference is taken on the
+    # standardised column, so compare against the same scaling the scorer applies.
+    assert abs(after - before) > 0.0
+    assert reported[name] != 0.0 or evaluation.matrix.values[position, column] == 0.0

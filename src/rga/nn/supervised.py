@@ -178,12 +178,28 @@ class SupervisedGnnScorer:
             torch.as_tensor(arrays.level, device=self._device),
             features,
         )
-        torch.sigmoid(logit).sum().backward()
+        # The logit, not the probability: the sigmoid saturates on exactly the
+        # candidates an analyst opens first, and a saturated sigmoid has no
+        # gradient to attribute with.
+        logit.sum().backward()
         assert features.grad is not None
         return (features.grad * features.detach()).squeeze(0).cpu().numpy()
 
+    def margins(self, candidates: CandidateSet) -> np.ndarray:
+        """The raw logits behind the scores.
+
+        Ranking is unaffected — the sigmoid is monotone — but explanation is not:
+        differences between saturated probabilities vanish into float error, while
+        the logits behind them stay apart.
+        """
+        return self._logits(candidates).cpu().numpy()
+
     def score(self, candidates: CandidateSet) -> np.ndarray:
         """Probability the classifier assigns to a change being an incident."""
+        return torch.sigmoid(self._logits(candidates)).cpu().numpy()
+
+    def _logits(self, candidates: CandidateSet) -> torch.Tensor:
+        """The head's output for every candidate, before the sigmoid."""
         if self._model is None:
             raise RuntimeError("the supervised gnn scorer must be fit before scoring")
         if candidates.graph is None:
@@ -198,11 +214,10 @@ class SupervisedGnnScorer:
             return torch.as_tensor(np.where(index < 0, unknown, index), device=self._device)
 
         with torch.no_grad():
-            logits = self._model.likelihood(
+            return self._model.likelihood(
                 padded[endpoints(arrays.src)],
                 padded[endpoints(arrays.dst)],
                 torch.as_tensor(arrays.relation, device=self._device),
                 torch.as_tensor(arrays.level, device=self._device),
                 torch.as_tensor(arrays.features, device=self._device),
             )
-        return torch.sigmoid(logits).cpu().numpy()

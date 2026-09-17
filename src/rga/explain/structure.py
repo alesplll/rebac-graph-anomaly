@@ -76,13 +76,16 @@ def edge_importance(
         raise ValueError("the candidate set carries no graph; structure cannot be explained")
 
     single = candidates.row(position)
-    baseline = float(scorer.score(single)[0])
+    # Margins rather than scores where the scorer offers them: a saturated sigmoid
+    # moves by nothing when an edge is removed, while the logit behind it moves.
+    measure = getattr(scorer, "margins", scorer.score)
+    baseline = float(measure(single)[0])
     subject, _, target = candidates.keys[position]
 
     found: list[EdgeImportance] = []
     for edge in neighbourhood(graph, subject, target, hops=hops, cap=cap):
         masked = replace(single, graph=_without(graph, int(edge)))
-        without = float(scorer.score(masked)[0])
+        without = float(measure(masked)[0])
         found.append(
             EdgeImportance(
                 subject=graph.node_ids[int(graph.edge_src[edge])],
