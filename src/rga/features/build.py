@@ -79,9 +79,8 @@ def build_candidates(
     automation_actors: frozenset[str] = AUTOMATION_ACTORS,
 ) -> CandidateSet:
     """Extract features for every grant inside the requested span."""
-    static = compute_static_attributes(
-        replay(dataset.events, until=dataset.split_ts), np.random.default_rng(static_seed)
-    )
+    graph = replay(dataset.events, until=dataset.split_ts)
+    static = compute_static_attributes(graph, np.random.default_rng(static_seed))
     # Labels are matched on identity and time together: a normal re-grant of the
     # same edge later in the window is a different candidate, not an anomaly.
     label_of = {(label.edge_key(), label.ts): label.pattern for label in dataset.labels}
@@ -130,4 +129,5 @@ def build_candidates(
         matrix=matrix,
         labels=np.array(labels, dtype=bool),
         patterns=tuple(patterns),
+        graph=graph,
     )

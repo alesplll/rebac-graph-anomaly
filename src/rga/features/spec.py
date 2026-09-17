@@ -14,6 +14,8 @@ from enum import StrEnum
 
 import numpy as np
 
+from rga.domain.graph import AccessGraph
+
 
 class FeatureGroup(StrEnum):
     """Which capability level a feature needs from the source."""
@@ -132,6 +134,10 @@ class CandidateSet:
     labels: np.ndarray
     #: Pattern name per candidate, empty string when the candidate is normal.
     patterns: tuple[str, ...]
+    #: The graph as it stood at the temporal split, shared by both spans. The
+    #: network propagates over it; the classical scorers never read it. None only
+    #: in hand-built fixtures that have no graph to speak of.
+    graph: AccessGraph | None = None
 
     @property
     def n_candidates(self) -> int:

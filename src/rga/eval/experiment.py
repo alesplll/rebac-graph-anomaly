@@ -85,6 +85,7 @@ def restrict_candidates(
         matrix=candidates.matrix.with_groups(groups),
         labels=candidates.labels,
         patterns=candidates.patterns,
+        graph=candidates.graph,
     )
 
 
