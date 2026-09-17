@@ -68,6 +68,10 @@ def build_scorer(name: str, seed: int) -> Scorer:
         return IsolationForestScorer(seed=seed)
     if name == "lof":
         return LocalOutlierFactorScorer()
+    if name == "gnn":
+        from rga.nn.scorer import GnnScorer
+
+        return GnnScorer(seed=seed)
     raise KeyError(f"unknown scorer: {name!r}")
 
 
