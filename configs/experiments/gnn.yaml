@@ -1,0 +1,14 @@
+# The comparison the module exists for. Every scorer sees the same dataset, the
+# same seeds and the same candidates; the only thing that differs is what it does
+# with them. Runs on the laptop CPU.
+name: gnn
+dataset: configs/generator/small-history.yaml
+seeds: [1, 2, 3, 4, 5]
+scorers:
+  - rules
+  - isolation_forest
+  - lof
+  - gnn
+  - gnn_supervised
+  - gnn_forest
+ks: [20, 50, 100]

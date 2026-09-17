@@ -1,0 +1,13 @@
+# The same comparison at full size, for the training PC. Not runnable in
+# reasonable time on a laptop.
+name: gnn-full
+dataset: configs/generator/default-history.yaml
+seeds: [1, 2, 3, 4, 5]
+scorers:
+  - rules
+  - isolation_forest
+  - lof
+  - gnn
+  - gnn_supervised
+  - gnn_forest
+ks: [20, 50, 100]
