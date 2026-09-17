@@ -13,13 +13,14 @@ from __future__ import annotations
 
 import hashlib
 import math
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 import numpy as np
 
 from rga.domain.entities import entity_type
 from rga.domain.relations import PermissionLevel, RelationType
 from rga.explain.features import FeatureContribution, feature_contributions
+from rga.explain.picture import render_subgraph
 from rga.explain.structure import EdgeImportance, edge_importance, neighbourhood
 from rga.explain.text import describe
 from rga.features.edges import decode_level
@@ -55,6 +56,10 @@ class Incident:
     features: tuple[FeatureContribution, ...] = ()
     edges: tuple[EdgeImportance, ...] = ()
     subgraph: dict[str, list] = field(default_factory=lambda: {"nodes": [], "edges": []})
+    #: The neighbourhood already drawn. Rendering here rather than in the page keeps
+    #: it under test; a layout that throws in a browser leaves an empty box and says
+    #: nothing about why.
+    picture: str = ""
 
     def as_dict(self) -> dict[str, object]:
         """The shape the API returns."""
@@ -90,6 +95,7 @@ class Incident:
                 for item in self.edges
             ],
             "subgraph": self.subgraph,
+            "picture": self.picture,
         }
 
 
@@ -206,7 +212,12 @@ def build_incident(
     subject, relation, target = candidates.keys[position]
     ordinal = decode_level(candidates.matrix.column("level_ordinal")[position])
     edges = edge_importance(scorer, candidates, position, cap=cap) if explain else ()
-    return Incident(
+    subgraph = (
+        _subgraph(candidates, position, edges, cap=cap)
+        if explain
+        else {"nodes": [], "edges": []}
+    )
+    drawn = Incident(
         id=incident_id(candidates.keys[position], int(candidates.ts[position])),
         score=score,
         rank=rank,
@@ -220,9 +231,6 @@ def build_incident(
         summary=describe(candidates, position),
         features=feature_contributions(scorer, candidates, position) if explain else (),
         edges=edges,
-        subgraph=(
-            _subgraph(candidates, position, edges, cap=cap)
-            if explain
-            else {"nodes": [], "edges": []}
-        ),
+        subgraph=subgraph,
     )
+    return replace(drawn, picture=render_subgraph(drawn.as_dict()) if explain else "")
