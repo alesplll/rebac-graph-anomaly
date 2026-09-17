@@ -16,3 +16,6 @@ data/
 experiments/runs/
 *.npz
 *.parquet
+
+# Model artefacts are reproducible from their recipe, like experiment runs.
+artifacts/
