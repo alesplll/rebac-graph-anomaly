@@ -14,6 +14,8 @@ from __future__ import annotations
 import hashlib
 from dataclasses import dataclass, field
 
+import numpy as np
+
 from rga.domain.entities import entity_type
 from rga.domain.relations import PermissionLevel, RelationType
 from rga.explain.features import FeatureContribution, feature_contributions
@@ -81,6 +83,27 @@ class Incident:
         }
 
 
+def _distances(graph, seeds: tuple[str, ...], *, depth: int) -> dict[str, int]:
+    """Hop distance from `seeds` to every node within `depth`, over the whole graph."""
+    hops = {name: 0 for name in seeds if name in graph.node_index}
+    frontier = {graph.node_index[name] for name in hops}
+
+    for step in range(1, depth + 1):
+        if not frontier:
+            break
+        touching = np.flatnonzero(
+            np.isin(graph.edge_src, list(frontier)) | np.isin(graph.edge_dst, list(frontier))
+        )
+        reached = set(graph.edge_src[touching].tolist()) | set(graph.edge_dst[touching].tolist())
+        frontier = set()
+        for index in reached:
+            name = graph.node_ids[int(index)]
+            if name not in hops:
+                hops[name] = step
+                frontier.add(int(index))
+    return hops
+
+
 def _subgraph(candidates: CandidateSet, position: int, edges, *, cap: int) -> dict[str, list]:
     """Nodes and edges around the change, each node with its distance in hops."""
     graph = candidates.graph
@@ -106,18 +129,25 @@ def _subgraph(candidates: CandidateSet, position: int, edges, *, cap: int) -> di
             }
         )
 
-    # Breadth first from the endpoints, over the edges that will actually be drawn.
-    for _ in range(2):
-        for edge in drawn:
-            for near, far in ((edge["subject"], edge["object"]), (edge["object"], edge["subject"])):
-                if near in hops:
-                    hops.setdefault(far, hops[near] + 1)
+    # Distances come from the whole graph, not from what ended up drawn. The cap on
+    # edges can cut a short connection, and a walk over the remainder would report a
+    # node as five hops away when the graph itself puts it at two.
+    distances = _distances(graph, tuple(hops), depth=2)
+
+    # Only the nodes that an edge actually touches are drawn. The two-hop ball around
+    # a busy user runs to hundreds of nodes; the picture shows the connections the
+    # score leaned on, not everything within reach of them.
+    shown = {edge["subject"] for edge in drawn} | {edge["object"] for edge in drawn}
+    shown |= set(hops)
 
     nodes = [
-        {"id": name, "type": entity_type(name).name.lower(), "hops": distance}
-        for name, distance in sorted(hops.items(), key=lambda pair: (pair[1], pair[0]))
+        {
+            "id": name,
+            "type": entity_type(name).name.lower(),
+            "hops": distances.get(name, 2),
+        }
+        for name in sorted(shown, key=lambda name: (distances.get(name, 2), name))
     ]
-    drawn = [edge for edge in drawn if edge["subject"] in hops and edge["object"] in hops]
     return {"nodes": nodes, "edges": drawn}
 
 
