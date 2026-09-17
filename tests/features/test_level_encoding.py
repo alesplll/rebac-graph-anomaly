@@ -42,4 +42,4 @@ def test_an_admin_grant_is_described_as_admin() -> None:
     column = candidates.matrix.column("level_ordinal")
     position = int(np.flatnonzero(column >= 1.0)[0])
 
-    assert "admin" in " ".join(describe(candidates, position))
+    assert "admin" in " ".join(item.text for item in describe(candidates, position))
