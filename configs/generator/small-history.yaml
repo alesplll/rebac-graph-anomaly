@@ -1,0 +1,49 @@
+# The small dataset plus labelled incidents before the split, so the supervised
+# baseline of spec section 8 has something to learn from. Patterns 6-8
+# (dormant_awakening, shadow_group, delegation_cascade) are deliberately absent
+# from train_patterns: they appear only in the evaluation window, and how a model
+# behaves on them is the result Module 3 is after.
+name: small-history
+seed: 20260912
+eval_window_days: 7
+
+org:
+  departments: 3
+  teams_per_department: [2, 3]
+  users_per_team: [3, 6]
+  projects_per_team: [1, 2]
+  objects_per_bucket: [200, 400]
+  cross_cutting_groups: 1
+  cross_cutting_membership_rate: 0.08
+  legitimate_exception_rate: 0.04
+
+timeline:
+  start_ts: 1735689600000   # 2025-01-01T00:00:00Z
+  days: 60
+  working_hours: [9, 19]
+  off_hours_rate: 0.05
+  weekend_rate: 0.08
+  hires_per_day: 0.5
+  departures_per_day: 0.15
+  grants_per_day: 120.0
+  uploads_per_day: 50.0
+
+anomalies:
+  patterns:
+    - self_grant_admin
+    - privileged_group_join
+    - grant_burst
+    - hierarchy_bypass
+    - cross_department
+    - dormant_awakening
+    - shadow_group
+    - delegation_cascade
+  rate: 0.02
+  train_contamination: 0.0
+  train_patterns:
+    - self_grant_admin
+    - privileged_group_join
+    - grant_burst
+    - hierarchy_bypass
+    - cross_department
+  train_rate: 0.004

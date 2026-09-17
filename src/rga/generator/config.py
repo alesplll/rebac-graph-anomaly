@@ -55,6 +55,12 @@ class AnomalyConfig:
     #: Share of anomalous edges planted in the training span, to test robustness
     #: to a training graph that is not perfectly clean.
     train_contamination: float
+    #: Patterns planted, labelled, before the split so the supervised baseline has
+    #: something to learn from. Patterns absent from this list are the ones it has
+    #: never seen, which is what the hidden-pattern contrast measures.
+    train_patterns: tuple[str, ...] = ()
+    #: Target share of training-span grants carrying such a labelled incident.
+    train_rate: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -141,6 +147,14 @@ def dataset_config_from_document(document: Mapping[str, object]) -> DatasetConfi
             train_contamination=_rate(
                 anomalies["train_contamination"],  # type: ignore[index]
                 "anomalies.train_contamination",
+            ),
+            train_patterns=tuple(
+                str(name)
+                for name in anomalies.get("train_patterns", ())  # type: ignore[union-attr]
+            ),
+            train_rate=_rate(
+                anomalies.get("train_rate", 0.0),  # type: ignore[union-attr]
+                "anomalies.train_rate",
             ),
         ),
         eval_window_days=eval_window_days,

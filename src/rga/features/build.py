@@ -83,7 +83,10 @@ def build_candidates(
     static = compute_static_attributes(graph, np.random.default_rng(static_seed))
     # Labels are matched on identity and time together: a normal re-grant of the
     # same edge later in the window is a different candidate, not an anomaly.
-    label_of = {(label.edge_key(), label.ts): label.pattern for label in dataset.labels}
+    label_of = {
+        (label.edge_key(), label.ts): label.pattern
+        for label in (*dataset.labels, *dataset.train_labels)
+    }
 
     start, end = _span_bounds(dataset, span, warmup_days)
     context = FeatureContext()

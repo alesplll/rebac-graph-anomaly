@@ -12,6 +12,7 @@ no measurement made on it means anything. Such injections are dropped.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 
 import numpy as np
@@ -33,6 +34,11 @@ from rga.util.timeutil import DAY_MS
 #: How many injection attempts per wanted anomaly before giving up on a pattern.
 _INJECTION_ATTEMPTS = 40
 
+#: Incidents are not planted into the founding burst of day zero: there is no
+#: settled structure there for them to stand out against. The same seven days the
+#: candidate builder skips.
+WARMUP_MS = 7 * DAY_MS
+
 
 @dataclass(frozen=True)
 class Dataset:
@@ -44,6 +50,10 @@ class Dataset:
     #: End of the training span and start of the evaluation window.
     split_ts: int
     window_end: int
+    #: Ground truth for incidents planted before the split. Kept apart from
+    #: `labels`, which is the evaluation window's ground truth and the only thing
+    #: the metrics ever see.
+    train_labels: tuple[AnomalyLabel, ...] = ()
 
     def window_events(self) -> tuple[GraphEvent, ...]:
         """Events inside the evaluation window — the edges to be scored."""
@@ -86,6 +96,7 @@ def build_dataset(config: DatasetConfig) -> Dataset:
         cutoff=split_ts,
         wanted=wanted,
         forbidden=normal_keys,
+        patterns=config.anomalies.patterns,
     )
 
     if config.anomalies.train_contamination > 0.0:
@@ -101,10 +112,29 @@ def build_dataset(config: DatasetConfig) -> Dataset:
             cutoff=start + DAY_MS,
             wanted=max(1, round(config.anomalies.train_contamination * train_grants)),
             forbidden=normal_keys | {label.edge_key() for label in labels},
+            patterns=config.anomalies.patterns,
         )
         # Contamination is deliberately unlabelled: it exists to dirty the
         # training graph, not to be scored.
         injected.extend(contaminated)
+
+    train_labels: list[AnomalyLabel] = []
+    if config.anomalies.train_rate > 0.0 and config.anomalies.train_patterns:
+        history_grants = sum(
+            1 for event in normal if event.op is EventOp.GRANT and event.ts < split_ts
+        )
+        planted, train_labels = _inject(
+            config=config,
+            org=org,
+            rng=rng,
+            journal=normal,
+            window=(start + WARMUP_MS, split_ts),
+            cutoff=start + WARMUP_MS,
+            wanted=max(1, round(config.anomalies.train_rate * history_grants)),
+            forbidden=normal_keys | {label.edge_key() for label in labels},
+            patterns=config.anomalies.train_patterns,
+        )
+        injected.extend(planted)
 
     events = sorted([*normal, *injected], key=lambda event: event.ts)
     return Dataset(
@@ -113,6 +143,7 @@ def build_dataset(config: DatasetConfig) -> Dataset:
         labels=tuple(sorted(labels, key=lambda label: label.ts)),
         split_ts=split_ts,
         window_end=window_end,
+        train_labels=tuple(sorted(train_labels, key=lambda label: label.ts)),
     )
 
 
@@ -126,9 +157,10 @@ def _inject(
     cutoff: int,
     wanted: int,
     forbidden: set[tuple[str, int, str]],
+    patterns: Sequence[str],
 ) -> tuple[list[GraphEvent], list[AnomalyLabel]]:
     """Plant anomalies until `wanted` labelled edges exist or attempts run out."""
-    if not config.anomalies.patterns:
+    if not patterns:
         return [], []
 
     graph = replay(journal, until=cutoff)
@@ -136,7 +168,7 @@ def _inject(
     labels: list[AnomalyLabel] = []
     taken = set(forbidden)
     exhausted: set[str] = set()
-    names = list(config.anomalies.patterns)
+    names = list(patterns)
 
     def attempt(name: str) -> bool:
         """Try one injection of a pattern. True when it landed."""

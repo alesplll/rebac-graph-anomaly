@@ -1,0 +1,47 @@
+# The reported dataset plus labelled incidents before the split. Same reasoning as
+# small-history.yaml: patterns 6-8 never appear in the training span, so the
+# supervised baseline has never seen them.
+name: default-history
+seed: 20260912
+eval_window_days: 14
+
+org:
+  departments: 8
+  teams_per_department: [3, 6]
+  users_per_team: [4, 14]
+  projects_per_team: [1, 4]
+  objects_per_bucket: [20, 400]
+  cross_cutting_groups: 3
+  cross_cutting_membership_rate: 0.06
+  legitimate_exception_rate: 0.03
+
+timeline:
+  start_ts: 1735689600000   # 2025-01-01T00:00:00Z
+  days: 180
+  working_hours: [9, 19]
+  off_hours_rate: 0.05
+  weekend_rate: 0.08
+  hires_per_day: 0.8
+  departures_per_day: 0.3
+  grants_per_day: 260.0
+  uploads_per_day: 60.0
+
+anomalies:
+  patterns:
+    - self_grant_admin
+    - privileged_group_join
+    - grant_burst
+    - hierarchy_bypass
+    - cross_department
+    - dormant_awakening
+    - shadow_group
+    - delegation_cascade
+  rate: 0.01
+  train_contamination: 0.0
+  train_patterns:
+    - self_grant_admin
+    - privileged_group_join
+    - grant_burst
+    - hierarchy_bypass
+    - cross_department
+  train_rate: 0.004
