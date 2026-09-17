@@ -107,9 +107,17 @@ def test_cutoff_on_an_untimestamped_graph_is_refused() -> None:
         Neo4jSource(_legacy(), MAPPING).snapshot(at=1_000)
 
 
-def test_events_are_not_available_from_a_snapshot() -> None:
-    with pytest.raises(NotImplementedError, match="change log"):
-        list(Neo4jSource(_modern(), MAPPING).events())
+def test_a_timestamped_snapshot_yields_a_journal() -> None:
+    """Superseded the refusal: section 12.2 asks a level-1 source for a change log."""
+    events = list(Neo4jSource(_modern(), MAPPING).events())
+
+    assert events
+    assert [event.ts for event in events] == sorted(event.ts for event in events)
+
+
+def test_a_snapshot_without_timestamps_still_has_no_journal() -> None:
+    with pytest.raises(ValueError, match="no timestamps"):
+        list(Neo4jSource(_legacy(), MAPPING).events())
 
 
 def test_unmapped_relation_is_reported_with_its_name() -> None:

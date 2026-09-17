@@ -8,6 +8,11 @@ test.
 Capability level depends on the data, not on the product: a deployment whose
 edges predate the timestamp patch reports level 0 and its temporal features are
 masked, exactly as any third-party engine without timestamps would be.
+
+A deployment that does record timestamps also gets a change log, reconstructed by
+ordering the edges by creation time. It holds grants only — a snapshot cannot show
+what was taken away — which is the limitation section 12.2 of the design document
+accepts in exchange for needing nothing but a snapshot.
 """
 
 from __future__ import annotations
@@ -17,8 +22,9 @@ from typing import Protocol
 
 from rga.adapters.base import Capabilities
 from rga.adapters.mapping import RelationMapping
-from rga.domain.events import GraphEvent
+from rga.domain.events import EventOp, GraphEvent
 from rga.domain.graph import UNKNOWN, AccessGraph, GraphBuilder
+from rga.domain.relations import PermissionLevel
 
 #: Rows inspected when deciding what the deployment can provide.
 _PROBE_SIZE = 512
@@ -95,10 +101,45 @@ class Neo4jSource:
         return builder.build()
 
     def events(self, since: int = 0, until: int | None = None) -> Iterator[GraphEvent]:
-        """Not available: a snapshot carries no change log."""
-        raise NotImplementedError(
-            "a Neo4j snapshot has no change log; revocations are invisible in it"
-        )
+        """The change log implied by the edge timestamps.
+
+        Two limits are inherent and not worked around. A snapshot shows no
+        revocations — a revoked edge is simply absent — so every event is a grant,
+        and a right granted and taken back between two snapshots never existed as
+        far as this source is concerned. And an edge written before the timestamp
+        patch carries no time; it is real context, so it is emitted just ahead of
+        the earliest known change rather than dropped.
+        """
+        rows = list(self._reader.relationships())
+        stamped = [row for row in rows if row.get("created_at") is not None]
+        if not stamped:
+            raise ValueError("this deployment records no timestamps; it has no journal")
+
+        earliest = min(int(row["created_at"]) for row in stamped)  # type: ignore[arg-type]
+        ordered: list[tuple[int, Mapping[str, object]]] = [
+            (earliest - 1, row) for row in rows if row.get("created_at") is None
+        ]
+        ordered += [(int(row["created_at"]), row) for row in stamped]  # type: ignore[arg-type]
+        ordered.sort(key=lambda pair: pair[0])
+
+        for ts, row in ordered:
+            if ts < since or (until is not None and ts > until):
+                continue
+            level_property = row.get("level")
+            relation, level = self._mapping.translate(
+                str(row["relation"]),
+                None if level_property is None else str(level_property),
+            )
+            actor = row.get("actor")
+            yield GraphEvent(
+                ts=ts,
+                op=EventOp.GRANT,
+                subject=str(row["subject"]),
+                relation=relation,
+                object=str(row["object"]),
+                level=PermissionLevel(int(level)),
+                actor=None if actor is None else str(actor),
+            )
 
 
 class BoltReader:
