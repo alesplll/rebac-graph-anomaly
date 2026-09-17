@@ -146,3 +146,23 @@ class CandidateSet:
     def y_true(self) -> np.ndarray:
         """Ground truth as integers, the shape every metric expects."""
         return self.labels.astype(np.int8)
+
+    def row(self, position: int) -> CandidateSet:
+        """One candidate as a set of its own, sharing the block and the graph.
+
+        Explaining a score means scoring the same change again and again against a
+        changed graph, and every one of those calls wants a candidate set.
+        """
+        window = slice(position, position + 1)
+        return CandidateSet(
+            keys=(self.keys[position],),
+            ts=self.ts[window],
+            matrix=FeatureMatrix(
+                values=self.matrix.values[window],
+                mask=self.matrix.mask[window],
+                block=self.matrix.block,
+            ),
+            labels=self.labels[window],
+            patterns=(self.patterns[position],),
+            graph=self.graph,
+        )
