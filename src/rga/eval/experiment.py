@@ -72,6 +72,10 @@ def build_scorer(name: str, seed: int) -> Scorer:
         from rga.nn.scorer import GnnScorer
 
         return GnnScorer(seed=seed)
+    if name == "gnn_supervised":
+        from rga.nn.supervised import SupervisedGnnScorer
+
+        return SupervisedGnnScorer(seed=seed)
     raise KeyError(f"unknown scorer: {name!r}")
 
 

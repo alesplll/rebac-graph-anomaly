@@ -3211,7 +3211,7 @@ class SupervisedGnnScorer:
             loss.backward()
             optimiser.step()
 
-            current = float(loss)
+            current = float(loss.detach())
             if current < best_loss - 1e-4:
                 best_loss, waited = current, 0
                 best_state = copy.deepcopy(model.state_dict())
