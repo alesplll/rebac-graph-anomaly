@@ -198,6 +198,47 @@ def format_results_table(result: ExperimentResult) -> str:
     return "\n".join(lines)
 
 
+#: The five patterns the supervised baseline is trained on.
+KNOWN_PATTERNS = (
+    "self_grant_admin",
+    "privileged_group_join",
+    "grant_burst",
+    "hierarchy_bypass",
+    "cross_department",
+)
+#: The three it never sees. How a model does here is what section 9 is after.
+HIDDEN_PATTERNS = ("dormant_awakening", "shadow_group", "delegation_cascade")
+
+
+def format_hidden_pattern_table(result: ExperimentResult) -> str:
+    """Recall on trained patterns against recall on unseen ones.
+
+    A model that learned the nature of an anomaly keeps its recall on patterns it
+    has never seen. A model that learned the generator loses it, and the gap column
+    measures exactly that.
+    """
+    lines = [
+        f"### Recall at {_PATTERN_K}: known patterns against hidden ones",
+        "",
+        "| scorer | known | hidden | gap |",
+        "|---|---|---|---|",
+    ]
+    for scorer in sorted(result.per_pattern):
+        found = result.per_pattern[scorer]
+        known = np.nanmean([found.get(name, 0.0) for name in KNOWN_PATTERNS])
+        hidden = np.nanmean([found.get(name, 0.0) for name in HIDDEN_PATTERNS])
+        lines.append(f"| {scorer} | {known:.2f} | {hidden:.2f} | {known - hidden:+.2f} |")
+
+    lines += [
+        "",
+        "Известными считаются паттерны 1-5 из раздела 5.3, на которых обучается",
+        "супервизорный вариант; скрытыми — паттерны 6-8, которых он не видел.",
+        "Самообучаемая модель не видит меток вообще, поэтому для неё все восемь",
+        "одинаково незнакомы, и разрыв у неё должен быть близок к нулю.",
+    ]
+    return "\n".join(lines)
+
+
 def format_ablation_table(result: ExperimentResult) -> str:
     """Quality per feature-group variant.
 
@@ -252,4 +293,6 @@ def save_results(path: Path, result: ExperimentResult) -> None:
     table = format_results_table(result)
     if {str(row["groups"]) for row in result.rows} != {"all"}:
         table += "\n\n" + format_ablation_table(result)
+    if result.per_pattern:
+        table += "\n\n" + format_hidden_pattern_table(result)
     (path / "results.md").write_text(table + "\n", encoding="utf-8")
