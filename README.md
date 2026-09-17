@@ -1,94 +1,64 @@
 # rebac-graph-anomaly
 
-Обнаружение структурно нетипичных изменений прав доступа в графе ReBAC.
+Finds structurally unusual permission changes in a ReBAC access graph.
 
-Система читает граф прав доступа и журнал его изменений, оценивает каждое изменение
-и выдаёт специалисту по информационной безопасности ранжированный список подозрительных
-выдач прав с обоснованием каждой: какие признаки повлияли на оценку и на какие связи
-графа она опиралась. Вердикта о компрометации система не выносит — она сокращает объём
-материала для ручного разбора.
+The system reads an access graph and its change log, scores every change, and hands a
+security analyst a ranked queue of suspicious grants with grounds for each: which
+features moved the score and which relationships it leaned on. It does not pronounce a
+verdict — it reduces how much has to be reviewed by hand.
 
-Дипломная работа, кафедра разработки систем поддержки принятия решений.
+## What it works with
 
-## С чем работает
+A source declares a capability level, and features it cannot supply are masked rather
+than faked:
 
-Источник объявляет уровень возможностей, и признаки, которые он не может заполнить,
-маскируются, а не подделываются:
-
-| Уровень | Что отдаёт источник | Что доступно |
+| Level | The source offers | What becomes available |
 |---|---|---|
-| 0 | снимок кортежей «субъект — отношение — объект» | структурные признаки |
-| 1 | плюс время создания рёбер | плюс временные признаки и журнал |
-| 2 | плюс инициатор изменения | плюс признаки происхождения |
+| 0 | a snapshot of subject–relation–object tuples | structural features |
+| 1 | plus edge creation times | plus temporal features and a change log |
+| 2 | plus the initiator of each change | plus provenance features |
 
-Готовые источники: синтетический генератор организации, файловый дамп журнала и живой
-`opens3-rebac` (Neo4j). Подключение другой системы авторизации — один класс по протоколу
-`GraphSource` и одна таблица соответствия отношений в `configs/mapping/`.
+Sources included: a synthetic organization generator, a journal dump, and a live
+`opens3-rebac` deployment over Neo4j. Adding another authorization system means one
+class implementing `GraphSource` and one relation mapping in `configs/mapping/`.
 
-Сущности и отношения повторяют формат движка авторизации: `user:<uuid>`, `group:<name>`,
-`bucket:<name>`, `object:<bucket>/<key>`; отношения `MEMBER_OF`, `HAS_PERMISSION`
-(несёт уровень), `PARENT_OF`, `OWNER_OF`; уровни упорядочены `read < write < create <
-delete < admin`.
+Identifiers follow the engine: `user:<uuid>`, `group:<name>`, `bucket:<name>`,
+`object:<bucket>/<key>`. Relations are `MEMBER_OF`, `HAS_PERMISSION` (carries an
+ordinal level `read < write < create < delete < admin`), `PARENT_OF`, `OWNER_OF`.
 
-## Что внутри
+Graph layers are written directly on PyTorch. PyTorch Geometric and DGL are not used:
+the graph is heterogeneous and multi-relational, and `HAS_PERMISSION` carries an
+ordinal level that no stock layer models.
 
-- `src/rga/domain` — сущности, события, граф, воспроизведение журнала
-- `src/rga/generator` — генератор организации и восемь размеченных аномальных паттернов
-- `src/rga/adapters` — протокол источника, Neo4j и файловый источники
-- `src/rga/features` — 70 признаков с группами и масками
-- `src/rga/baselines` — правила, `IsolationForest`, `LOF`
-- `src/rga/nn` — реляционный слой, кодировщик, головы, обучение, скореры
-- `src/rga/explain` — вклад признаков, вклад структуры, текстовые формулировки
-- `src/rga/service` — сервис на FastAPI; `web/` — страница аналитика
-- `src/rga/eval` — метрики и прогон экспериментов
+## Install
 
-Графовые слои написаны на PyTorch как тензорной библиотеке. PyTorch Geometric и DGL
-не используются: граф гетерогенный и мультиреляционный, а `HAS_PERMISSION` несёт
-порядковый уровень прав, чего готовые слои не моделируют.
-
-## Установка
-
-Python 3.12 через `uv`. Группы зависимостей `cpu` и `gpu` конфликтуют, ставится одна.
+Python 3.12 through `uv`. The `cpu` and `gpu` extras conflict; install one.
 
 ```bash
-uv sync --extra cpu --extra service --extra ml --extra neo4j   # рабочая машина
-uv sync --extra gpu --extra ml                                  # машина с видеокартой
+uv sync --extra cpu --extra service --extra ml --extra neo4j
 ```
 
-## Запуск
+## Run
 
 ```bash
-# датасет и его характеристики
 uv run rga generate --config configs/generator/small.yaml --out data/small
-
-# сравнение скореров на пяти сидах
 uv run rga evaluate --config configs/experiments/gnn.yaml --out experiments/runs/gnn
-
-# обучить модель и сохранить артефакт
 uv run rga train --config configs/train/gnn-supervised.yaml --out artifacts/gnn-supervised
-
-# сервис и страница на http://127.0.0.1:8000
-uv run rga serve --config configs/service/synthetic.yaml
+uv run rga serve --config configs/service/synthetic.yaml       # http://127.0.0.1:8000
 ```
 
-Переключение на живой движок — только замена конфигурации на
-`configs/service/opens3.yaml`; кода это не касается.
-
-## Проверка
+Pointing the service at a live engine is a configuration swap to
+`configs/service/opens3.yaml`; no code changes.
 
 ```bash
-uv run pytest -m "not integration and not gpu"   # без внешних сервисов
-uv run pytest -m integration                      # требует запущенного Neo4j
+uv run pytest -m "not integration and not gpu"
 uv run ruff check .
 ```
 
-## Результаты и документы
+## Documents
 
-- `docs/thesis/` — таблицы для работы, каждая воспроизводится одной командой
-- `docs/module-3-findings.md` — что измерено в нейросетевом модуле, включая три
-  отрицательных результата с разобранными причинами
-- `docs/dataset-calibration.md` — артефакты синтетики, найденные бейзлайнами
-- `docs/opens3-rebac-findings.md` — замечания к соседнему движку авторизации
-- `docs/demo.md` — порядок демонстрации
-- `docs/run-on-gpu.md` — что запускать на машине с видеокартой
-- `docs/superpowers/specs/` и `docs/superpowers/plans/` — дизайн-документы и планы модулей
+`docs/thesis/` holds the result tables, each reproducible by one command.
+`docs/module-3-findings.md` records what the neural module measured, including three
+negative results and their causes. `docs/demo.md` is the demonstration running order,
+`docs/run-on-gpu.md` what to run on the GPU machine. Designs and per-module plans are
+under `docs/superpowers/`.

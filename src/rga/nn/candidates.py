@@ -17,6 +17,7 @@ import numpy as np
 from rga.baselines.base import dense_matrix
 from rga.domain.graph import AccessGraph
 from rga.domain.relations import PermissionLevel
+from rga.features.edges import decode_level
 from rga.features.spec import CandidateSet
 
 _MAX_LEVEL = int(PermissionLevel.ADMIN)
@@ -49,7 +50,9 @@ def candidate_arrays(
     relation = np.array([key[1] for key in candidates.keys], dtype=np.int64)
 
     ordinal = candidates.matrix.column("level_ordinal")
-    level = np.clip(np.rint(ordinal), 0, _MAX_LEVEL).astype(np.int64)
+    level = np.clip(
+        [decode_level(value) for value in ordinal], 0, _MAX_LEVEL
+    ).astype(np.int64)
 
     dense = dense_matrix(candidates.matrix)
     if mean is None or std is None:

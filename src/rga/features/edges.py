@@ -58,6 +58,17 @@ EDGE_BLOCK = FeatureBlock(
 _INDEX = {name: position for position, name in enumerate(EDGE_BLOCK.names)}
 
 
+def decode_level(value: float) -> int:
+    """The ordinal level behind the normalised `level_ordinal` feature.
+
+    The feature is stored as a fraction of admin so that it sits on the same scale as
+    its neighbours. Anything reading it back — the level embedding of the likelihood
+    head, an incident card, a sentence for an analyst — has to undo that, or five
+    levels silently collapse into two.
+    """
+    return round(float(value) * float(PermissionLevel.ADMIN))
+
+
 def _prior_level(context: FeatureContext, event: GraphEvent) -> PermissionLevel:
     """Strongest permission the subject already held over this target or its bucket."""
     best = context.level_on(event.subject, event.object)

@@ -21,6 +21,7 @@ from rga.domain.relations import PermissionLevel, RelationType
 from rga.explain.features import FeatureContribution, feature_contributions
 from rga.explain.structure import EdgeImportance, edge_importance, neighbourhood
 from rga.explain.text import describe
+from rga.features.edges import decode_level
 from rga.features.spec import CandidateSet
 
 
@@ -163,7 +164,7 @@ def build_incident(
 ) -> Incident:
     """Assemble one change, with or without the expensive attributions."""
     subject, relation, target = candidates.keys[position]
-    ordinal = round(float(candidates.matrix.column("level_ordinal")[position]))
+    ordinal = decode_level(candidates.matrix.column("level_ordinal")[position])
     edges = edge_importance(scorer, candidates, position, cap=cap) if explain else ()
     return Incident(
         id=incident_id(candidates.keys[position], int(candidates.ts[position])),

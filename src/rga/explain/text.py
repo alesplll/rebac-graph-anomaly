@@ -13,6 +13,7 @@ saying nobody granted it.
 from __future__ import annotations
 
 from rga.domain.relations import PermissionLevel
+from rga.features.edges import decode_level
 from rga.features.spec import CandidateSet
 from rga.util.timeutil import hour_of_day
 
@@ -41,7 +42,7 @@ def describe(candidates: CandidateSet, position: int) -> tuple[str, ...]:
 
     level = _said(candidates, position, "level_ordinal")
     if level is not None and level > 0:
-        name = PermissionLevel(round(level)).name.lower()
+        name = PermissionLevel(decode_level(level)).name.lower()
         lines.append(f"Выдан уровень «{name}» на ресурс {target}.")
     else:
         lines.append(f"Создана связь между {subject} и {target}.")
