@@ -12,6 +12,7 @@ on screen, not for fifty rows.
 from __future__ import annotations
 
 import hashlib
+import math
 from dataclasses import dataclass, field
 
 import numpy as np
@@ -23,6 +24,7 @@ from rga.explain.structure import EdgeImportance, edge_importance, neighbourhood
 from rga.explain.text import describe
 from rga.features.edges import decode_level
 from rga.features.spec import CandidateSet
+from rga.util.timeutil import hour_of_day
 
 
 def incident_id(key: tuple[str, int, str], ts: int) -> str:
@@ -45,6 +47,11 @@ class Incident:
     object: str
     level: str
     summary: tuple[str, ...]
+    #: Who made the change, where the source records it.
+    actor: str | None = None
+    #: The facts the sentences are drawn from, so the page can lay them out itself.
+    #: A value of None means the source does not record it — not that it is zero.
+    context: dict[str, object] = field(default_factory=dict)
     features: tuple[FeatureContribution, ...] = ()
     edges: tuple[EdgeImportance, ...] = ()
     subgraph: dict[str, list] = field(default_factory=lambda: {"nodes": [], "edges": []})
@@ -60,6 +67,8 @@ class Incident:
             "relation": self.relation,
             "object": self.object,
             "level": self.level,
+            "actor": self.actor,
+            "context": self.context,
             "summary": list(self.summary),
             "features": [
                 {
@@ -152,6 +161,37 @@ def _subgraph(candidates: CandidateSet, position: int, edges, *, cap: int) -> di
     return {"nodes": nodes, "edges": drawn}
 
 
+def _fact(candidates: CandidateSet, position: int, name: str) -> float | None:
+    """A feature's value, or None when the source could not supply it."""
+    if not bool(candidates.matrix.observed(name)[position]):
+        return None
+    return float(candidates.matrix.column(name)[position])
+
+
+def _context(candidates: CandidateSet, position: int) -> dict[str, object]:
+    """The facts behind the sentences, decoded back into readable quantities."""
+    jump = _fact(candidates, position, "level_jump")
+    common = _fact(candidates, position, "common_neighbours")
+    hops = _fact(candidates, position, "path_hops")
+    unreachable = _fact(candidates, position, "path_unreachable")
+
+    def flag(name: str) -> bool | None:
+        value = _fact(candidates, position, name)
+        return None if value is None else bool(value >= 0.5)
+
+    return {
+        "actor_is_subject": flag("actor_is_subject"),
+        "off_hours": flag("is_off_hours"),
+        "weekend": flag("is_weekend"),
+        "bypasses_bucket": flag("bypasses_bucket"),
+        "level_jump": None if jump is None else round(jump),
+        # Both are stored through log1p, so they come back through expm1.
+        "common_neighbours": None if common is None else round(math.expm1(common)),
+        "path_hops": None if hops is None or unreachable == 1.0 else round(hops),
+        "hour": hour_of_day(int(candidates.ts[position])),
+    }
+
+
 def build_incident(
     scorer,
     candidates: CandidateSet,
@@ -175,6 +215,8 @@ def build_incident(
         relation=RelationType(relation).name,
         object=target,
         level=PermissionLevel(max(ordinal, 0)).name.lower(),
+        actor=candidates.actors[position] if candidates.actors else None,
+        context=_context(candidates, position),
         summary=describe(candidates, position),
         features=feature_contributions(scorer, candidates, position) if explain else (),
         edges=edges,

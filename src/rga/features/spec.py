@@ -134,6 +134,9 @@ class CandidateSet:
     labels: np.ndarray
     #: Pattern name per candidate, empty string when the candidate is normal.
     patterns: tuple[str, ...]
+    #: Who made each change, where the source records it. None means unknown, which
+    #: is a different thing from nobody, and the interface has to say so.
+    actors: tuple[str | None, ...] = ()
     #: The graph as it stood at the temporal split, shared by both spans. The
     #: network propagates over it; the classical scorers never read it. None only
     #: in hand-built fixtures that have no graph to speak of.
@@ -164,5 +167,6 @@ class CandidateSet:
             ),
             labels=self.labels[window],
             patterns=(self.patterns[position],),
+            actors=(self.actors[position],) if self.actors else (),
             graph=self.graph,
         )

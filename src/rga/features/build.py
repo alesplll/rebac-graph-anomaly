@@ -101,6 +101,7 @@ def candidates_from_events(
     masks: list[np.ndarray] = []
     flags: list[bool] = []
     patterns: list[str] = []
+    actors: list[str | None] = []
 
     for event in events:
         is_candidate = (
@@ -117,6 +118,7 @@ def candidates_from_events(
             pattern = label_of.get((event.edge_key(), event.ts), "")
             flags.append(bool(pattern))
             patterns.append(pattern)
+            actors.append(event.actor)
         context.apply(event)
 
     matrix = FeatureMatrix(
@@ -136,6 +138,7 @@ def candidates_from_events(
         matrix=matrix,
         labels=np.array(flags, dtype=bool),
         patterns=tuple(patterns),
+        actors=tuple(actors),
         graph=graph,
     )
 
