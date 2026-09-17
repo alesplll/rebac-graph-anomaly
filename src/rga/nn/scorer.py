@@ -117,6 +117,10 @@ class GnnScorer:
             self._node_rank(deviation, arrays.dst),
         )
 
+    def feature_gradients(self, candidates: CandidateSet, position: int) -> np.ndarray | None:
+        """None: this scorer reads structure only, so no feature moved the score."""
+        return None
+
     def _encode(self, graph: AccessGraph) -> tuple[torch.Tensor, np.ndarray]:
         """Representations and profile deviations for every node of `graph`.
 

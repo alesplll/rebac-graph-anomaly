@@ -153,6 +153,35 @@ class SupervisedGnnScorer:
         with torch.no_grad():
             return self._model.encoder(node_input_features(tensors), tensors)
 
+    def feature_gradients(self, candidates: CandidateSet, position: int) -> np.ndarray:
+        """d(score)/d(feature) times the feature, over the dense matrix columns."""
+        if self._model is None:
+            raise RuntimeError("the supervised gnn scorer must be fit before explaining")
+        if candidates.graph is None:
+            raise ValueError("the candidate set carries no graph; the network needs one")
+
+        single = candidates.row(position)
+        arrays, _, _ = candidate_arrays(single, mean=self._mean, std=self._std)
+        state = self._encode(single.graph)
+
+        padded = torch.cat([state, torch.zeros(1, state.shape[1], device=self._device)])
+        unknown = padded.shape[0] - 1
+
+        def endpoints(index: np.ndarray) -> torch.Tensor:
+            return torch.as_tensor(np.where(index < 0, unknown, index), device=self._device)
+
+        features = torch.as_tensor(arrays.features, device=self._device).requires_grad_(True)
+        logit = self._model.likelihood(
+            padded[endpoints(arrays.src)],
+            padded[endpoints(arrays.dst)],
+            torch.as_tensor(arrays.relation, device=self._device),
+            torch.as_tensor(arrays.level, device=self._device),
+            features,
+        )
+        torch.sigmoid(logit).sum().backward()
+        assert features.grad is not None
+        return (features.grad * features.detach()).squeeze(0).cpu().numpy()
+
     def score(self, candidates: CandidateSet) -> np.ndarray:
         """Probability the classifier assigns to a change being an incident."""
         if self._model is None:
