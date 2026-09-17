@@ -17,8 +17,20 @@ function kind(id) {
   return KIND.includes(prefix) ? prefix : "";
 }
 
+// A uuid is a wall of characters that means nothing to a reader, so it is cut down
+// to its first block; names of groups and buckets carry meaning and are left alone.
+// The full identifier stays in the tooltip, because it is what you paste into a query.
+function shorten(id) {
+  const [prefix, ...rest] = String(id).split(":");
+  const name = rest.join(":");
+  if (!name) return String(id);
+  const looksLikeUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-/i.test(name);
+  if (looksLikeUuid) return `${prefix}:${name.slice(0, 8)}…`;
+  return name.length > 34 ? `${prefix}:${name.slice(0, 33)}…` : `${prefix}:${name}`;
+}
+
 function node(id) {
-  return `<span class="node ${kind(id)}">${escapeHtml(id)}</span>`;
+  return `<span class="node ${kind(id)}" title="${escapeHtml(id)}">${escapeHtml(shorten(id))}</span>`;
 }
 
 function escapeHtml(value) {
@@ -177,11 +189,19 @@ async function openCard(id) {
        <span class="place">место ${body.rank} в очереди на разбор</span>
      </div>
      ${factsBlock(body)}
-     <h2>Окрестность изменения</h2>
+     <h2>Граф вокруг изменения</h2>
      <div id="picture">${body.picture || ""}</div>
+     <p class="caption">Нарисован граф <b>до</b> изменения: то, на фоне чего оценка и
+       выносилась. Красный пунктир — само оцениваемое изменение, единственное отличие
+       от нарисованного состояния. Толщина остальных связей показывает, насколько
+       каждая держала оценку: тёплые держали вверх, синие — вниз. Колонки слева
+       направо — расстояние в шагах по графу.</p>
      ${LEGEND}
      <h2>Что здесь необычного</h2>
-     <ul>${body.summary.map((line) => `<li>${escapeHtml(line)}</li>`).join("")}</ul>
+     <ul class="observations">${body.summary
+       .map((item) => `<li><span class="said">${escapeHtml(item.text)}</span>
+           <span class="why">${escapeHtml(item.why)}</span></li>`)
+       .join("")}</ul>
      <h2>Связи, на которые опиралась оценка</h2>${edgeTable(body.edges)}
      <h2>Вклад признаков</h2>${featureTable(body.features)}`;
 }

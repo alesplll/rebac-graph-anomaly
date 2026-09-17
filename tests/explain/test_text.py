@@ -28,7 +28,7 @@ def test_a_self_grant_is_named_as_an_observation(candidates) -> None:
     observed = candidates.matrix.observed("actor_is_subject")
     position = int(np.flatnonzero((column > 0.5) & observed)[0])
 
-    said = " ".join(describe(candidates, position))
+    said = " ".join(item.text for item in describe(candidates, position))
 
     assert "сам" in said
 
@@ -36,6 +36,6 @@ def test_a_self_grant_is_named_as_an_observation(candidates) -> None:
 def test_no_verdict_is_ever_pronounced(candidates) -> None:
     """The system supports a decision. It does not announce a compromise."""
     for position in range(min(candidates.n_candidates, 200)):
-        said = " ".join(describe(candidates, position)).lower()
+        said = " ".join(item.text for item in describe(candidates, position)).lower()
         for word in FORBIDDEN_WORDS:
             assert word not in said, f"candidate {position} says {word!r}"

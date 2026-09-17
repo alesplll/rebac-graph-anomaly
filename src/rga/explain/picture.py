@@ -51,8 +51,47 @@ def _empty(message: str) -> str:
     )
 
 
-def render_subgraph(card: dict, *, edges: int = 10) -> str:
+def _untangled(columns: dict[int, list[dict]], drawn: list[dict]) -> dict[int, list[dict]]:
+    """Order each column by where its neighbours sit, to stop lines crossing.
+
+    Alphabetical order inside a column is arbitrary with respect to the edges, and on
+    a dozen connections it produces a thicket. Two barycentre passes — put each node
+    at the average height of the nodes it connects to — remove most crossings and
+    keep the layout deterministic, which a force simulation would not.
+    """
+    neighbours: dict[str, list[str]] = {}
+    for edge in drawn:
+        neighbours.setdefault(edge["subject"], []).append(edge["object"])
+        neighbours.setdefault(edge["object"], []).append(edge["subject"])
+
+    order = {
+        node["id"]: index
+        for column in columns.values()
+        for index, node in enumerate(column)
+    }
+
+    for _ in range(2):
+        for hops in sorted(columns):
+            column = columns[hops]
+            column.sort(
+                key=lambda node: (
+                    sum(order.get(near, 0) for near in neighbours.get(node["id"], []))
+                    / max(len(neighbours.get(node["id"], [])), 1),
+                    node["id"],
+                )
+            )
+            for index, node in enumerate(column):
+                order[node["id"]] = index
+    return columns
+
+
+def render_subgraph(card: dict, *, edges: int = 8, untangle: bool = True) -> str:
     """Draw the neighbourhood held in an incident payload.
+
+    What is drawn is the graph **as it stood before the change**, plus the change
+    itself as a dashed line. That is what makes the picture worth looking at: the
+    difference between the two is exactly one edge, and everything else is the
+    context the score was judged against.
 
     `edges` bounds how much is shown: the relationships that moved the score most,
     and only the nodes they touch. Everything within two hops of a busy user runs to
@@ -77,6 +116,9 @@ def render_subgraph(card: dict, *, edges: int = 10) -> str:
     for node in sorted(nodes, key=lambda node: (node["hops"], node["id"])):
         columns.setdefault(int(node["hops"]), []).append(node)
 
+    if untangle:
+        columns = _untangled(columns, drawn)
+
     place: dict[str, tuple[int, int]] = {}
     for hops, column in columns.items():
         for index, node in enumerate(column):
@@ -92,7 +134,7 @@ def render_subgraph(card: dict, *, edges: int = 10) -> str:
     parts = [
         f'<svg viewBox="0 0 {width} {height}" role="img" '
         'xmlns="http://www.w3.org/2000/svg" font-family="system-ui, sans-serif">',
-        "<title>Окрестность изменения: колонки — расстояние в шагах по графу</title>",
+        "<title>Граф до изменения; красным пунктиром — оцениваемое изменение</title>",
     ]
 
     for edge in drawn:

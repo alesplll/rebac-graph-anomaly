@@ -22,7 +22,7 @@ from rga.domain.relations import PermissionLevel, RelationType
 from rga.explain.features import FeatureContribution, feature_contributions
 from rga.explain.picture import render_subgraph
 from rga.explain.structure import EdgeImportance, edge_importance, neighbourhood
-from rga.explain.text import describe
+from rga.explain.text import Observation, describe
 from rga.features.edges import decode_level
 from rga.features.spec import CandidateSet
 from rga.util.timeutil import hour_of_day
@@ -47,7 +47,7 @@ class Incident:
     relation: str
     object: str
     level: str
-    summary: tuple[str, ...]
+    summary: tuple[Observation, ...]
     #: Who made the change, where the source records it.
     actor: str | None = None
     #: The facts the sentences are drawn from, so the page can lay them out itself.
@@ -74,7 +74,7 @@ class Incident:
             "level": self.level,
             "actor": self.actor,
             "context": self.context,
-            "summary": list(self.summary),
+            "summary": [{"text": item.text, "why": item.why} for item in self.summary],
             "features": [
                 {
                     "name": item.name,

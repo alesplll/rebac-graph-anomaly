@@ -127,6 +127,14 @@ main {
 #card ul { margin: 0; padding-left: 1.1rem; }
 #card ul li { margin-bottom: .2rem; }
 
+.caption { margin: .5rem 0 0; color: var(--muted); font-size: .8rem; line-height: 1.5; max-width: 72ch; }
+.caption b { color: var(--ink); }
+
+.observations { list-style: none; padding-left: 0; }
+.observations li { margin-bottom: .7rem; padding-left: .8rem; border-left: 3px solid var(--line); }
+.observations .said { display: block; }
+.observations .why { display: block; color: var(--muted); font-size: .84rem; margin-top: .15rem; max-width: 74ch; }
+
 table { border-collapse: collapse; width: 100%; font-size: .85rem; background: var(--card); }
 th, td { text-align: left; padding: .32rem .55rem; border-bottom: 1px solid var(--line); }
 th { color: var(--muted); font-weight: 500; font-size: .78rem; }

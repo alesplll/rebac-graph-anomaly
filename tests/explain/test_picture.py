@@ -99,3 +99,51 @@ def test_an_empty_neighbourhood_says_so_instead_of_drawing_nothing() -> None:
 
     assert "<text" in markup
     assert re.search(r"связ", markup, re.IGNORECASE)
+
+
+def _crossings(markup: str) -> int:
+    """How many pairs of drawn connections cross each other."""
+    import re
+
+    segments = [
+        tuple(float(value) for value in match)
+        for match in re.findall(
+            r'<line[^>]*x1="([-\d.]+)" y1="([-\d.]+)" x2="([-\d.]+)" y2="([-\d.]+)"', markup
+        )
+    ]
+
+    def side(ax, ay, bx, by, cx, cy):
+        return (bx - ax) * (cy - ay) - (by - ay) * (cx - ax)
+
+    total = 0
+    for index, first in enumerate(segments):
+        for second in segments[index + 1 :]:
+            a = side(*first, second[0], second[1])
+            b = side(*first, second[2], second[3])
+            c = side(*second, first[0], first[1])
+            d = side(*second, first[2], first[3])
+            if a * b < 0 and c * d < 0:
+                total += 1
+    return total
+
+
+def test_the_layout_untangles_what_it_can(card) -> None:
+    """Ordering nodes by where their neighbours sit removes most crossings.
+
+    Alphabetical order inside a column is arbitrary with respect to the edges, and
+    on a dozen connections it produces a thicket. A couple of barycentre passes is
+    the cheapest fix that keeps the layout deterministic.
+    """
+    from rga.explain.picture import render_subgraph as render
+
+    tangled = render(card, edges=8, untangle=False)
+    tidy = render(card, edges=8, untangle=True)
+
+    assert _crossings(tidy) <= _crossings(tangled)
+    assert _crossings(tidy) <= 4
+
+
+def test_the_caption_says_what_is_drawn(card) -> None:
+    markup = render_subgraph(card)
+
+    assert "до изменения" in markup
