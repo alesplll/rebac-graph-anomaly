@@ -30,6 +30,11 @@ def _parser() -> argparse.ArgumentParser:
     train.add_argument("--config", type=Path, required=True)
     train.add_argument("--out", type=Path, required=True)
 
+    serve = commands.add_parser("serve", help="run the scoring service and the page")
+    serve.add_argument("--config", type=Path, required=True)
+    serve.add_argument("--host", default="127.0.0.1")
+    serve.add_argument("--port", type=int, default=8000)
+
     return parser
 
 
@@ -49,6 +54,16 @@ def main(argv: list[str] | None = None) -> int:
 
     if arguments.command == "stats":
         print(format_stats(dataset_stats(load_dataset(arguments.dataset))))
+        return 0
+
+    if arguments.command == "serve":
+        import uvicorn
+
+        from rga.service.app import create_app
+        from rga.service.config import load_service_config
+
+        config = load_service_config(arguments.config)
+        uvicorn.run(create_app(config), host=arguments.host, port=arguments.port)
         return 0
 
     if arguments.command == "train":

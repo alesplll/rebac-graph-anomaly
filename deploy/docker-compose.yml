@@ -1,0 +1,24 @@
+# The review service next to a running opens3-rebac. Neo4j is expected to be the one
+# the authorization engine writes to, so this file joins its network rather than
+# starting a second database.
+services:
+  review:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    command: >-
+      uv run rga serve --config configs/service/opens3.yaml --host 0.0.0.0 --port 8000
+    environment:
+      NEO4J_URI: bolt://neo4j:7687
+    ports:
+      - "8000:8000"
+    volumes:
+      - ../artifacts:/app/artifacts:ro
+      - ../configs:/app/configs:ro
+    networks:
+      - opens3-network
+
+networks:
+  opens3-network:
+    external: true
+    name: opens3-rebac_opens3-network
