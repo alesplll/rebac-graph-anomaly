@@ -46,6 +46,37 @@ class SupervisedGnnScorer:
         self._mean: np.ndarray | None = None
         self._std: np.ndarray | None = None
 
+
+    @property
+    def seed(self) -> int:
+        return self._seed
+
+    @property
+    def config(self) -> ModelConfig:
+        return self._config
+
+    def state_for_artifact(self) -> dict[str, object]:
+        """Everything a reloaded copy needs, as plain arrays and numbers."""
+        if self._model is None:
+            raise RuntimeError("the supervised gnn scorer must be fit before saving")
+        assert self._mean is not None and self._std is not None
+        return {
+            "weights": self._model.state_dict(),
+            "edge_dim": int(self._model.likelihood.mlp[0].in_features)
+            - 3 * self._config.hidden_dim
+            - 2 * self._config.embedding_dim,
+            "mean": self._mean,
+            "std": self._std,
+        }
+
+    def restore_from_artifact(self, state: dict[str, object]) -> None:
+        """Rebuild a fitted scorer from `state_for_artifact`."""
+        model = GnnModel(edge_dim=int(state["edge_dim"]), config=self._config)  # type: ignore[arg-type]
+        model.load_state_dict(state["weights"])  # type: ignore[arg-type]
+        self._model = model.to(self._device).eval()
+        self._mean = np.asarray(state["mean"])
+        self._std = np.asarray(state["std"])
+
     def fit(self, train: CandidateSet) -> None:
         """Train the classifier on the labelled training span."""
         if train.graph is None:

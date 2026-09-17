@@ -47,6 +47,41 @@ class GnnScorer:
         self._likelihood_rank: RankTransform | None = None
         self._deviation_rank: RankTransform | None = None
 
+
+    @property
+    def seed(self) -> int:
+        return self._seed
+
+    @property
+    def config(self) -> ModelConfig:
+        return self._config
+
+    def state_for_artifact(self) -> dict[str, object]:
+        """Everything a reloaded copy needs, as plain arrays and numbers."""
+        if self._model is None or self._likelihood_rank is None:
+            raise RuntimeError("the gnn scorer must be fit before saving")
+        assert self._deviation_rank is not None
+        assert self._mean is not None and self._std is not None
+        return {
+            "weights": self._model.state_dict(),
+            # This scorer withholds the context row, so its head has no feature inputs.
+            "edge_dim": 0,
+            "mean": self._mean,
+            "std": self._std,
+            "likelihood_reference": self._likelihood_rank.reference,
+            "deviation_reference": self._deviation_rank.reference,
+        }
+
+    def restore_from_artifact(self, state: dict[str, object]) -> None:
+        """Rebuild a fitted scorer from `state_for_artifact`."""
+        model = GnnModel(edge_dim=int(state["edge_dim"]), config=self._config)  # type: ignore[arg-type]
+        model.load_state_dict(state["weights"])  # type: ignore[arg-type]
+        self._model = model.to(self._device).eval()
+        self._mean = np.asarray(state["mean"])
+        self._std = np.asarray(state["std"])
+        self._likelihood_rank = RankTransform(np.asarray(state["likelihood_reference"]))
+        self._deviation_rank = RankTransform(np.asarray(state["deviation_reference"]))
+
     def fit(self, train: CandidateSet) -> None:
         """Train on the span and record what the rank transform needs."""
         if train.graph is None:
