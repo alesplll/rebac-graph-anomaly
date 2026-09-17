@@ -142,3 +142,21 @@ td.number { text-align: right; font-variant-numeric: tabular-nums; }
 tr.unobserved td { color: var(--muted); font-style: italic; }
 td.up { color: var(--warm); }
 td.down { color: var(--accent); }
+
+.actions { display: flex; align-items: center; gap: .8rem; }
+a.back { color: #cfe0ec; text-decoration: none; font-size: .86rem; border-bottom: 1px dotted #7d99ad; }
+a.back:hover { color: #fff; }
+
+#reference { padding: 1.2rem 1.5rem 4rem; max-width: 86ch; }
+#reference h2 { font-size: .85rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 2rem 0 .6rem; }
+#reference h3 { font-size: 1rem; margin: 1rem 0 .3rem; }
+#reference .lead { color: var(--ink); max-width: 76ch; }
+#reference .entry { border-left: 3px solid var(--line); padding-left: .9rem; margin-bottom: 1rem; }
+#reference .entry p { margin: .25rem 0; max-width: 76ch; }
+#reference .look { color: var(--muted); font-size: .88rem; }
+#reference table { margin-bottom: 1rem; }
+.mono { font-family: ui-monospace, "Cascadia Code", Consolas, monospace; font-size: .78rem; color: var(--muted); }
+
+.picture-box { margin-top: 1.6rem; border-top: 1px solid var(--line); padding-top: .8rem; }
+.picture-box summary { cursor: pointer; font-size: .82rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 600; }
+.picture-box[open] summary { margin-bottom: .6rem; }

@@ -16,6 +16,7 @@ from fastapi.staticfiles import StaticFiles
 from rga.domain.entities import entity_type
 from rga.domain.relations import PermissionLevel, RelationType
 from rga.explain.incident import build_incident
+from rga.explain.reference import reference
 from rga.explain.structure import neighbourhood
 from rga.service.analysis import Analysis, analyse
 from rga.service.config import ServiceConfig
@@ -35,6 +36,11 @@ def create_app(config: ServiceConfig, *, scorer=None) -> FastAPI:
 
     def current() -> Analysis:
         return state["analysis"]
+
+    @app.get("/api/reference")
+    def help_page() -> dict[str, object]:
+        """What the columns mean, assembled from the texts the cards themselves use."""
+        return reference()
 
     @app.get("/api/status")
     def status() -> dict[str, object]:
@@ -141,5 +147,9 @@ def create_app(config: ServiceConfig, *, scorer=None) -> FastAPI:
         @app.get("/")
         def page() -> FileResponse:
             return FileResponse(WEB / "index.html")
+
+        @app.get("/reference")
+        def help_view() -> FileResponse:
+            return FileResponse(WEB / "reference.html")
 
     return app

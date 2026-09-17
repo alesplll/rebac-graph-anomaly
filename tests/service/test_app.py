@@ -85,3 +85,11 @@ def test_refresh_reruns_the_analysis(client) -> None:
 
     assert client.post("/api/refresh").status_code == 200
     assert client.get("/api/status").json()["refreshed_at"] >= before
+
+
+def test_the_reference_is_served(client) -> None:
+    body = client.get("/api/reference").json()
+
+    assert body["observations"]
+    assert body["features"]
+    assert {"edges", "features"} <= set(body["tables"])

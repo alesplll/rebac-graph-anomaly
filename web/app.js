@@ -10,6 +10,8 @@ const statusLine = document.getElementById("status");
 const counter = document.getElementById("counter");
 
 const KIND = ["user", "group", "bucket", "object"];
+let GLOSSARY = {};
+let GROUPS = {};
 const WEEKDAYS = ["воскресенье", "понедельник", "вторник", "среда", "четверг", "пятница", "суббота"];
 
 function kind(id) {
@@ -152,13 +154,18 @@ function featureTable(features) {
     const value = item.observed ? item.value.toFixed(3) : "не сообщается";
     const share = item.observed ? item.contribution.toFixed(3) : "—";
     const direction = item.contribution >= 0 ? "up" : "down";
+    const title = GLOSSARY[item.name] || item.name;
     return `<tr class="${item.observed ? "" : "unobserved"}">
-      <td>${escapeHtml(item.name)}</td><td>${escapeHtml(item.group)}</td>
+      <td>${escapeHtml(title)}<br><span class="mono">${escapeHtml(item.name)}</span></td>
+      <td>${escapeHtml(GROUPS[item.group] || item.group)}</td>
       <td class="number">${value}</td>
       <td class="number ${item.observed ? direction : ""}">${share}</td></tr>`;
   }).join("");
   return `<table><thead><tr><th>признак</th><th>группа</th>
-    <th>значение</th><th>вклад</th></tr></thead><tbody>${rows}</tbody></table>`;
+    <th>значение</th><th>вклад</th></tr></thead><tbody>${rows}</tbody></table>
+    <p class="caption">Знак показывает направление: положительный вклад поднимал
+      оценку, отрицательный опускал. Подробнее — в
+      <a href="/reference">справочнике</a>.</p>`;
 }
 
 function edgeTable(edges) {
@@ -189,21 +196,22 @@ async function openCard(id) {
        <span class="place">место ${body.rank} в очереди на разбор</span>
      </div>
      ${factsBlock(body)}
-     <h2>Граф вокруг изменения</h2>
-     <div id="picture">${body.picture || ""}</div>
-     <p class="caption">Нарисован граф <b>до</b> изменения: то, на фоне чего оценка и
-       выносилась. Красный пунктир — само оцениваемое изменение, единственное отличие
-       от нарисованного состояния. Толщина остальных связей показывает, насколько
-       каждая держала оценку: тёплые держали вверх, синие — вниз. Колонки слева
-       направо — расстояние в шагах по графу.</p>
-     ${LEGEND}
      <h2>Что здесь необычного</h2>
      <ul class="observations">${body.summary
-       .map((item) => `<li><span class="said">${escapeHtml(item.text)}</span>
-           <span class="why">${escapeHtml(item.why)}</span></li>`)
+       .map((item) => `<li>${escapeHtml(item.text)}</li>`)
        .join("")}</ul>
+     <p class="caption">Что означает каждое наблюдение и на что смотреть —
+       в <a href="/reference">справочнике</a>.</p>
      <h2>Связи, на которые опиралась оценка</h2>${edgeTable(body.edges)}
-     <h2>Вклад признаков</h2>${featureTable(body.features)}`;
+     <h2>Вклад признаков</h2>${featureTable(body.features)}
+     <details class="picture-box">
+       <summary>Граф вокруг изменения</summary>
+       <div id="picture">${body.picture || ""}</div>
+       <p class="caption">Граф <b>до</b> изменения — то, на фоне чего выносилась
+         оценка. Красный пунктир — само оцениваемое изменение, единственное отличие
+         от нарисованного состояния.</p>
+       ${LEGEND}
+     </details>`;
 }
 
 document.getElementById("refresh").addEventListener("click", async () => {
@@ -213,6 +221,15 @@ document.getElementById("refresh").addEventListener("click", async () => {
   await loadQueue();
 });
 document.getElementById("apply").addEventListener("click", loadQueue);
+
+// The glossary comes from the service so the table can speak Russian without
+// keeping a second copy of the feature names in the page.
+get("/api/reference")
+  .then((body) => {
+    body.features.forEach((item) => { GLOSSARY[item.name] = item.title; });
+    Object.entries(body.groups).forEach(([name, item]) => { GROUPS[name] = item.title; });
+  })
+  .catch(() => {});
 
 loadStatus().then(loadQueue).catch((error) => {
   statusLine.textContent = `Не удалось получить данные: ${error.message}`;

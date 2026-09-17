@@ -12,6 +12,7 @@
 | `features.md` | Полный перечень 70 признаков с группами | `uv run python scripts/thesis_tables.py` |
 | `gnn.md` | Сеть против бейзлайнов, пять сидов, один и тот же датасет | `uv run rga evaluate --config configs/experiments/gnn.yaml --out experiments/runs/gnn` |
 | `gradcheck.md` | Сверка аналитических градиентов с конечными разностями | `uv run python scripts/gradient_check.py` |
+| `reference.md` | Справочник аналитика: наблюдения, таблицы карточки, все 70 признаков | `uv run python scripts/reference_doc.py` |
 
 Сюда же относятся три документа уровнем выше: `docs/dataset-calibration.md` —
 артефакты синтетики, найденные измерением, `docs/module-3-findings.md` — разбор

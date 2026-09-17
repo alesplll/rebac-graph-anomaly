@@ -35,8 +35,146 @@ FORBIDDEN_WORDS = (
 class Observation:
     """One thing noticed about a change, and why it is worth noticing."""
 
+    kind: str
     text: str
     why: str
+
+
+@dataclass(frozen=True)
+class Rationale:
+    """A kind of observation, described once for the reference page."""
+
+    kind: str
+    title: str
+    why: str
+    look_at: str
+
+
+#: Every kind of observation a card can show. The cards state what happened; this is
+#: where what the usual process looks like is written down, once, for a reader who
+#: does not work with the system daily. The interface renders it as a reference page
+#: rather than repeating it under every row.
+CATALOGUE: tuple[Rationale, ...] = (
+    Rationale(
+        kind="level",
+        title="Выдан уровень права",
+        why=(
+            "Уровни упорядочены от чтения до администрирования, и каждый включает "
+            "нижестоящие. Чем выше уровень, тем больше операций открывает одно это "
+            "ребро графа."
+        ),
+        look_at=(
+            "Сопоставьте уровень с задачей: нужен ли для работы именно он. "
+            "Уровень admin на бакете позволяет и читать, и удалять, и менять права "
+            "дальше."
+        ),
+    ),
+    Rationale(
+        kind="membership",
+        title="Создано членство в группе",
+        why=(
+            "Членство само по себе прав не даёт, но наследует все права группы. "
+            "Поэтому вступление в группу расширяет доступ не хуже прямой выдачи прав, "
+            "а выглядит скромнее и реже попадает в обзор."
+        ),
+        look_at=(
+            "Посмотрите, какие права есть у группы и насколько они шире прежних прав "
+            "субъекта. Рукописные правила этот случай не ловят вовсе."
+        ),
+    ),
+    Rationale(
+        kind="self_grant",
+        title="Право выдал сам получатель",
+        why=(
+            "В штатной процедуре право выдаёт владелец ресурса или администратор. "
+            "Когда субъект выдаёт право себе, решение никем со стороны не "
+            "подтверждено, и обычная проверка «вторыми глазами» не срабатывает."
+        ),
+        look_at=(
+            "Само по себе это законно: владелец часто повышает себе уровень на "
+            "собственном бакете, и в нормальном потоке таких выдач около десятой "
+            "части. Смотреть стоит на сочетание с остальными наблюдениями — прежде "
+            "всего с отсутствием общих соседей и со скачком уровня."
+        ),
+    ),
+    Rationale(
+        kind="level_jump",
+        title="Скачок уровня через несколько ступеней",
+        why=(
+            "Обычно доступ расширяется постепенно, по мере работы: сначала чтение, "
+            "потом запись. Скачок сразу через несколько ступеней означает, что "
+            "промежуточные шаги пропущены."
+        ),
+        look_at=(
+            "Сравните с тем, что у субъекта уже было в этом поддереве ресурсов. "
+            "Переход read → admin резче, чем read → write, и модель различает их, "
+            "потому что уровень закодирован как порядковая величина."
+        ),
+    ),
+    Rationale(
+        kind="bypass",
+        title="Право на объект в обход бакета",
+        why=(
+            "Права принято выдавать на бакет целиком: так они видны в одном месте и "
+            "снимаются вместе с ним. Право прямо на объект даёт доступ к содержимому, "
+            "не появляясь в списке прав на бакет."
+        ),
+        look_at=(
+            "Проверьте, есть ли у субъекта права на сам бакет. Если нет — доступ "
+            "получен в обход того уровня, за которым обычно следят."
+        ),
+    ),
+    Rationale(
+        kind="no_common",
+        title="Нет общих соседей у субъекта и ресурса",
+        why=(
+            "Как правило, к моменту выдачи субъект и ресурс уже связаны: общая "
+            "группа, общий проект, соседние права. Отсутствие общих соседей означает, "
+            "что доступ выдан вне сложившейся структуры."
+        ),
+        look_at=(
+            "Посмотрите на подразделение субъекта и на владельца ресурса. Доступ "
+            "через границу подразделения без общих связей — это то, что в каталоге "
+            "угроз называется горизонтальным перемещением."
+        ),
+    ),
+    Rationale(
+        kind="no_path",
+        title="Пути по графу прав не было",
+        why=(
+            "Движок авторизации отвечает на запрос, идя по графу от субъекта к "
+            "ресурсу. Если пути не было, то до этого изменения субъект не мог "
+            "добраться до ресурса никаким способом."
+        ),
+        look_at=(
+            "Доступ появился с нуля, а не расширил существующий. Это сильнее, чем "
+            "просто отсутствие общих соседей."
+        ),
+    ),
+    Rationale(
+        kind="off_hours",
+        title="Изменение вне рабочих часов",
+        why=(
+            "Основная масса изменений прав приходится на рабочее время, когда рядом "
+            "есть кому спросить и согласовать. Ночные изменения реже проходят через "
+            "обычные согласования и позже попадаются на глаза."
+        ),
+        look_at=(
+            "Признак слабый сам по себе: в нормальном потоке ночных изменений около "
+            "пяти процентов, и дежурные работы дают их регулярно. Вес он набирает "
+            "только вместе с остальными."
+        ),
+    ),
+    Rationale(
+        kind="weekend",
+        title="Изменение в выходной день",
+        why=(
+            "То же соображение, что и с ночным временем: в выходной меньше "
+            "свидетелей у изменения и дольше срок до его разбора."
+        ),
+        look_at="Как и ночное время, признак вспомогательный, а не решающий.",
+    ),
+)
 
 
 def _said(candidates: CandidateSet, position: int, name: str) -> float | None:
@@ -56,6 +194,7 @@ def describe(candidates: CandidateSet, position: int) -> tuple[Observation, ...]
         name = PermissionLevel(decode_level(level)).name.lower()
         found.append(
             Observation(
+                kind="level",
                 text=f"Выдан уровень «{name}» на ресурс {target}.",
                 why=(
                     "Уровни упорядочены от чтения до администрирования, и каждый "
@@ -67,6 +206,7 @@ def describe(candidates: CandidateSet, position: int) -> tuple[Observation, ...]
     else:
         found.append(
             Observation(
+                kind="membership",
                 text=f"Создана связь между {subject} и {target}.",
                 why=(
                     "Членство в группе само по себе прав не даёт, но наследует все "
@@ -79,6 +219,7 @@ def describe(candidates: CandidateSet, position: int) -> tuple[Observation, ...]
     if _said(candidates, position, "actor_is_subject") == 1.0:
         found.append(
             Observation(
+                kind="self_grant",
                 text="Право выдал сам субъект, а не кто-то другой.",
                 why=(
                     "В штатной процедуре право выдаёт владелец ресурса или "
@@ -95,6 +236,7 @@ def describe(candidates: CandidateSet, position: int) -> tuple[Observation, ...]
     if jump is not None and jump >= 2:
         found.append(
             Observation(
+                kind="level_jump",
                 text=(
                     f"Уровень выше на {int(jump)} ступени, чем то, что у субъекта было "
                     "в этом поддереве ресурсов."
@@ -110,6 +252,7 @@ def describe(candidates: CandidateSet, position: int) -> tuple[Observation, ...]
     if _said(candidates, position, "bypasses_bucket") == 1.0:
         found.append(
             Observation(
+                kind="bypass",
                 text="Право выдано на объект, хотя прав на содержащий его бакет нет.",
                 why=(
                     "Права принято выдавать на бакет целиком: так они видны в одном "
@@ -123,6 +266,7 @@ def describe(candidates: CandidateSet, position: int) -> tuple[Observation, ...]
     if common is not None and common == 0:
         found.append(
             Observation(
+                kind="no_common",
                 text="У субъекта и ресурса нет ни одного общего соседа в графе.",
                 why=(
                     "Как правило, к моменту выдачи субъект и ресурс уже связаны: общая "
@@ -135,6 +279,7 @@ def describe(candidates: CandidateSet, position: int) -> tuple[Observation, ...]
     if _said(candidates, position, "path_unreachable") == 1.0:
         found.append(
             Observation(
+                kind="no_path",
                 text="До этого ресурса от субъекта не было пути по графу прав.",
                 why=(
                     "Движок авторизации отвечает на запрос, идя по графу от субъекта к "
@@ -148,6 +293,7 @@ def describe(candidates: CandidateSet, position: int) -> tuple[Observation, ...]
     if _said(candidates, position, "is_off_hours") == 1.0:
         found.append(
             Observation(
+                kind="off_hours",
                 text=(
                     f"Изменение сделано в {hour_of_day(int(candidates.ts[position]))}:00 — "
                     "вне рабочих часов."
@@ -163,6 +309,7 @@ def describe(candidates: CandidateSet, position: int) -> tuple[Observation, ...]
     if _said(candidates, position, "is_weekend") == 1.0:
         found.append(
             Observation(
+                kind="weekend",
                 text="Изменение сделано в выходной день.",
                 why=(
                     "То же соображение, что и с ночным временем: в выходной меньше "
