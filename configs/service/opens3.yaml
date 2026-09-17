@@ -1,0 +1,11 @@
+# The same service against a live opens3-rebac, running from the feat/graph-timestamps
+# branch. Nothing above the adapter changes; only this file does.
+source:
+  kind: neo4j
+  uri: bolt://localhost:7687
+  user: neo4j
+  password: password123
+  mapping: configs/mapping/opens3.yaml
+model: artifacts/gnn-supervised
+window_days: 7
+queue: 50

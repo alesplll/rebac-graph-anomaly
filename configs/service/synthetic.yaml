@@ -1,0 +1,8 @@
+# The demonstration's main scenario: a generated organization, its evaluation window,
+# and the queue an analyst would work. Depends on nothing but this repository.
+source:
+  kind: synthetic
+  dataset: configs/generator/small-history.yaml
+model: artifacts/gnn-supervised
+window_days: 7
+queue: 50
