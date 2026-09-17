@@ -7,11 +7,13 @@ stood immediately before the edge appeared.
 
 from __future__ import annotations
 
+from collections.abc import Iterable, Mapping
 from enum import StrEnum
 
 import numpy as np
 
 from rga.domain.events import EventOp, GraphEvent
+from rga.domain.graph import AccessGraph
 from rga.domain.replay import replay
 from rga.features.context import FeatureContext
 from rga.features.edges import EDGE_BLOCK, edge_features
@@ -70,35 +72,37 @@ def _candidate_row(
     )
 
 
-def build_candidates(
-    dataset: Dataset,
-    span: Span,
+def candidates_from_events(
+    events: Iterable[GraphEvent],
     *,
+    start: int,
+    end: int,
+    graph: AccessGraph,
     static_seed: int = 0,
-    warmup_days: int = WARMUP_DAYS,
+    labels: Mapping[tuple[tuple[str, int, str], int], str] | None = None,
     automation_actors: frozenset[str] = AUTOMATION_ACTORS,
 ) -> CandidateSet:
-    """Extract features for every grant inside the requested span."""
-    graph = replay(dataset.events, until=dataset.split_ts)
+    """Extract features for every grant inside [start, end).
+
+    `graph` is the state the network propagates over — normally the snapshot at the
+    temporal split. `labels` is ground truth where it exists; a live source has none
+    and passes nothing, which makes every candidate unlabelled rather than normal.
+    """
     static = compute_static_attributes(graph, np.random.default_rng(static_seed))
     # Labels are matched on identity and time together: a normal re-grant of the
     # same edge later in the window is a different candidate, not an anomaly.
-    label_of = {
-        (label.edge_key(), label.ts): label.pattern
-        for label in (*dataset.labels, *dataset.train_labels)
-    }
+    label_of = dict(labels or {})
 
-    start, end = _span_bounds(dataset, span, warmup_days)
     context = FeatureContext()
 
     keys: list[tuple[str, int, str]] = []
     stamps: list[int] = []
     rows: list[np.ndarray] = []
     masks: list[np.ndarray] = []
-    labels: list[bool] = []
+    flags: list[bool] = []
     patterns: list[str] = []
 
-    for event in dataset.events:
+    for event in events:
         is_candidate = (
             event.op is EventOp.GRANT
             and start <= event.ts < end
@@ -111,7 +115,7 @@ def build_candidates(
             rows.append(values)
             masks.append(mask)
             pattern = label_of.get((event.edge_key(), event.ts), "")
-            labels.append(bool(pattern))
+            flags.append(bool(pattern))
             patterns.append(pattern)
         context.apply(event)
 
@@ -130,7 +134,31 @@ def build_candidates(
         keys=tuple(keys),
         ts=np.array(stamps, dtype=np.int64),
         matrix=matrix,
-        labels=np.array(labels, dtype=bool),
+        labels=np.array(flags, dtype=bool),
         patterns=tuple(patterns),
         graph=graph,
+    )
+
+
+def build_candidates(
+    dataset: Dataset,
+    span: Span,
+    *,
+    static_seed: int = 0,
+    warmup_days: int = WARMUP_DAYS,
+    automation_actors: frozenset[str] = AUTOMATION_ACTORS,
+) -> CandidateSet:
+    """Extract features for every grant inside the requested span of a dataset."""
+    start, end = _span_bounds(dataset, span, warmup_days)
+    return candidates_from_events(
+        dataset.events,
+        start=start,
+        end=end,
+        graph=replay(dataset.events, until=dataset.split_ts),
+        static_seed=static_seed,
+        labels={
+            (label.edge_key(), label.ts): label.pattern
+            for label in (*dataset.labels, *dataset.train_labels)
+        },
+        automation_actors=automation_actors,
     )
