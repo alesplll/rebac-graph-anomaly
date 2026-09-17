@@ -16,6 +16,7 @@ from __future__ import annotations
 import numpy as np
 import torch
 
+from rga.domain.graph import AccessGraph
 from rga.features.spec import CandidateSet
 from rga.nn.candidates import CandidateArrays, candidate_arrays, without_features
 from rga.nn.config import ModelConfig
@@ -43,8 +44,6 @@ class GnnScorer:
         self._model: GnnModel | None = None
         self._mean: np.ndarray | None = None
         self._std: np.ndarray | None = None
-        self._state: torch.Tensor | None = None
-        self._deviation: np.ndarray | None = None
         self._likelihood_rank: RankTransform | None = None
         self._deviation_rank: RankTransform | None = None
 
@@ -60,32 +59,49 @@ class GnnScorer:
             train.graph, arrays, self._config, seed=self._seed, device=self._device
         )
 
-        tensors = graph_tensors(train.graph, device=self._device)
-        inputs = node_input_features(tensors)
-        with torch.no_grad():
-            self._state = self._model.encoder(inputs, tensors)
-            self._deviation = (
-                self._model.reconstruction.deviation(self._state, inputs).cpu().numpy()
-            )
-
-        self._likelihood_rank = RankTransform.fit(1.0 - self._likelihood(arrays))
-        self._deviation_rank = RankTransform.fit(self._deviation)
+        state, deviation = self._encode(train.graph)
+        self._likelihood_rank = RankTransform.fit(1.0 - self._likelihood(state, arrays))
+        self._deviation_rank = RankTransform.fit(deviation)
 
     def score(self, candidates: CandidateSet) -> np.ndarray:
         """One score per candidate in [0, 1], higher meaning more unusual."""
         if self._model is None or self._likelihood_rank is None:
             raise RuntimeError("the gnn scorer must be fit before scoring")
 
-        arrays, _, _ = candidate_arrays(candidates, mean=self._mean, std=self._std)
-        unlikeliness = self._likelihood_rank.apply(1.0 - self._likelihood(without_features(arrays)))
-        return combine(unlikeliness, self._node_rank(arrays.src), self._node_rank(arrays.dst))
+        if candidates.graph is None:
+            raise ValueError("the candidate set carries no graph; the network needs one")
 
-    def _likelihood(self, arrays: CandidateArrays) -> np.ndarray:
-        """Probability the model assigns to each change being ordinary."""
-        assert self._model is not None and self._state is not None
-        padded = torch.cat(
-            [self._state, torch.zeros(1, self._state.shape[1], device=self._device)]
+        state, deviation = self._encode(candidates.graph)
+        arrays, _, _ = candidate_arrays(candidates, mean=self._mean, std=self._std)
+        unlikeliness = self._likelihood_rank.apply(
+            1.0 - self._likelihood(state, without_features(arrays))
         )
+        return combine(
+            unlikeliness,
+            self._node_rank(deviation, arrays.src),
+            self._node_rank(deviation, arrays.dst),
+        )
+
+    def _encode(self, graph: AccessGraph) -> tuple[torch.Tensor, np.ndarray]:
+        """Representations and profile deviations for every node of `graph`.
+
+        Recomputed per call rather than cached: the graph a service scores is not the
+        graph the model was fitted on, and a node index means something only inside
+        one graph. Caching them cost nothing inside the experiment runner, where both
+        spans share a graph, and would have produced nonsense anywhere else.
+        """
+        assert self._model is not None
+        tensors = graph_tensors(graph, device=self._device)
+        inputs = node_input_features(tensors)
+        with torch.no_grad():
+            state = self._model.encoder(inputs, tensors)
+            deviation = self._model.reconstruction.deviation(state, inputs).cpu().numpy()
+        return state, deviation
+
+    def _likelihood(self, state: torch.Tensor, arrays: CandidateArrays) -> np.ndarray:
+        """Probability the model assigns to each change being ordinary."""
+        assert self._model is not None
+        padded = torch.cat([state, torch.zeros(1, state.shape[1], device=self._device)])
         unknown = padded.shape[0] - 1
 
         def endpoints(index: np.ndarray) -> torch.Tensor:
@@ -101,11 +117,11 @@ class GnnScorer:
             )
         return torch.sigmoid(logits).cpu().numpy()
 
-    def _node_rank(self, index: np.ndarray) -> np.ndarray:
+    def _node_rank(self, deviation: np.ndarray, index: np.ndarray) -> np.ndarray:
         """Ranked profile deviation of an endpoint, neutral where it is unknown."""
-        assert self._deviation is not None and self._deviation_rank is not None
+        assert self._deviation_rank is not None
         known = index >= 0
         ranks = np.full(index.shape, NEUTRAL, dtype=np.float64)
         if known.any():
-            ranks[known] = self._deviation_rank.apply(self._deviation[index[known]])
+            ranks[known] = self._deviation_rank.apply(deviation[index[known]])
         return ranks

@@ -18,6 +18,7 @@ import numpy as np
 import torch
 from torch.nn import functional as F  # noqa: N812
 
+from rga.domain.graph import AccessGraph
 from rga.features.spec import CandidateSet
 from rga.nn.candidates import candidate_arrays
 from rga.nn.config import ModelConfig
@@ -44,7 +45,6 @@ class SupervisedGnnScorer:
         self._model: GnnModel | None = None
         self._mean: np.ndarray | None = None
         self._std: np.ndarray | None = None
-        self._state: torch.Tensor | None = None
 
     def fit(self, train: CandidateSet) -> None:
         """Train the classifier on the labelled training span."""
@@ -110,18 +110,28 @@ class SupervisedGnnScorer:
 
         model.load_state_dict(best_state)
         self._model = model.eval()
+
+    def _encode(self, graph: AccessGraph) -> torch.Tensor:
+        """Representations for every node of `graph`, computed per call.
+
+        A node index means something only inside one graph, so the representations of
+        the training graph cannot be reused for a graph the service was pointed at.
+        """
+        assert self._model is not None
+        tensors = graph_tensors(graph, device=self._device)
         with torch.no_grad():
-            self._state = self._model.encoder(inputs, tensors)
+            return self._model.encoder(node_input_features(tensors), tensors)
 
     def score(self, candidates: CandidateSet) -> np.ndarray:
         """Probability the classifier assigns to a change being an incident."""
-        if self._model is None or self._state is None:
+        if self._model is None:
             raise RuntimeError("the supervised gnn scorer must be fit before scoring")
+        if candidates.graph is None:
+            raise ValueError("the candidate set carries no graph; the network needs one")
 
         arrays, _, _ = candidate_arrays(candidates, mean=self._mean, std=self._std)
-        padded = torch.cat(
-            [self._state, torch.zeros(1, self._state.shape[1], device=self._device)]
-        )
+        state = self._encode(candidates.graph)
+        padded = torch.cat([state, torch.zeros(1, state.shape[1], device=self._device)])
         unknown = padded.shape[0] - 1
 
         def endpoints(index: np.ndarray) -> torch.Tensor:
