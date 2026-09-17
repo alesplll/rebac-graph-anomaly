@@ -69,8 +69,10 @@ def test_attribution_follows_the_logit_not_the_probability(fitted) -> None:
     step = 1e-3
 
     single = evaluation.row(position)
-    reported = {item.name: item.contribution for item in
-                feature_contributions(scorer, evaluation, position, top=len(evaluation.matrix.block))}
+    everything = feature_contributions(
+        scorer, evaluation, position, top=len(evaluation.matrix.block)
+    )
+    reported = {item.name: item.contribution for item in everything}
 
     name = "level_ordinal"
     column = evaluation.matrix.block.names.index(name)
