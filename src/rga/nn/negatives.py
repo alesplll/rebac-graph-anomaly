@@ -22,7 +22,7 @@ from dataclasses import dataclass
 import numpy as np
 
 from rga.domain.graph import AccessGraph
-from rga.domain.relations import LEVEL_CARRYING, PermissionLevel, RelationType
+from rga.domain.relations import LEVEL_CARRYING, PermissionLevel
 
 _MIN_LEVEL = int(PermissionLevel.READ)
 _MAX_LEVEL = int(PermissionLevel.ADMIN)
@@ -40,25 +40,41 @@ class CorruptedEdges:
     origin: np.ndarray
 
 
-def _undirected_neighbours(graph: AccessGraph) -> list[np.ndarray]:
-    """Neighbour indices per node, ignoring direction and relation."""
-    buckets: list[list[int]] = [[] for _ in range(graph.num_nodes)]
-    for source, target in zip(graph.edge_src, graph.edge_dst, strict=True):
-        buckets[int(source)].append(int(target))
-        buckets[int(target)].append(int(source))
-    return [np.array(sorted(set(items)), dtype=np.int64) for items in buckets]
+def undirected_csr(graph: AccessGraph) -> tuple[np.ndarray, np.ndarray]:
+    """Neighbour lists of the undirected projection, as (indptr, indices).
+
+    Parallel edges are kept rather than deduplicated: building a set per node was a
+    second Python loop over the graph, and keeping duplicates only reweights the
+    draw towards heavily connected pairs. The set of reachable nodes is unchanged.
+    """
+    tail = np.concatenate([graph.edge_src, graph.edge_dst]).astype(np.int64)
+    head = np.concatenate([graph.edge_dst, graph.edge_src]).astype(np.int64)
+    order = np.argsort(tail, kind="stable")
+    indices = head[order]
+    indptr = np.zeros(graph.num_nodes + 1, dtype=np.int64)
+    np.cumsum(np.bincount(tail, minlength=graph.num_nodes), out=indptr[1:])
+    return indptr, indices
 
 
-def _two_hop(neighbours: list[np.ndarray], node: int, rng: np.random.Generator) -> int:
-    """A node two hops away, or -1 when the neighbourhood is too small."""
-    first = neighbours[node]
-    if first.size == 0:
-        return -1
-    middle = int(rng.choice(first))
-    second = neighbours[middle]
-    if second.size == 0:
-        return -1
-    return int(rng.choice(second))
+def _random_neighbour(
+    indptr: np.ndarray, indices: np.ndarray, nodes: np.ndarray, rng: np.random.Generator
+) -> np.ndarray:
+    """One neighbour of every given node, or -1 where the node has none."""
+    if indices.size == 0:
+        return np.full(nodes.shape, -1, dtype=np.int64)
+    degree = indptr[nodes + 1] - indptr[nodes]
+    offset = np.floor(rng.random(nodes.size) * np.maximum(degree, 1)).astype(np.int64)
+    picked = indices[np.clip(indptr[nodes] + offset, 0, indices.size - 1)]
+    return np.where(degree > 0, picked, -1)
+
+
+def _two_hop(
+    indptr: np.ndarray, indices: np.ndarray, nodes: np.ndarray, rng: np.random.Generator
+) -> np.ndarray:
+    """A node two undirected steps away, or -1 where the walk died out."""
+    middle = _random_neighbour(indptr, indices, nodes, rng)
+    second = _random_neighbour(indptr, indices, np.where(middle >= 0, middle, 0), rng)
+    return np.where(middle >= 0, second, -1)
 
 
 def sample_negatives(
@@ -71,63 +87,71 @@ def sample_negatives(
     per_edge: int,
     rng: np.random.Generator,
 ) -> CorruptedEdges:
-    """Draw `per_edge` corrupted variants of every positive."""
-    neighbours = _undirected_neighbours(graph)
+    """Draw `per_edge` corrupted variants of every positive.
+
+    Every draw is made for the whole batch at once. The strategy of a draw is still
+    its index modulo five, so a batch carries all five kinds in the same proportion
+    as the per-edge loop this replaced; what changed is the order in which random
+    numbers are consumed, and therefore which edges come out for a given seed.
+    """
+    count = len(src)
+    origin = np.repeat(np.arange(count, dtype=np.int64), per_edge)
+    strategy = np.tile(np.arange(per_edge, dtype=np.int64) % 5, count)
+
+    base_src = np.asarray(src, dtype=np.int64)[origin]
+    base_dst = np.asarray(dst, dtype=np.int64)[origin]
+    base_relation = np.asarray(relation, dtype=np.int64)[origin]
+    base_level = np.asarray(level, dtype=np.int64)[origin]
+
+    out_src, out_dst = base_src.copy(), base_dst.copy()
+    out_relation, out_level = base_relation.copy(), base_level.copy()
+
     in_degree = np.bincount(graph.edge_dst, minlength=graph.num_nodes).astype(np.float64)
     popularity = in_degree + 1.0
     popularity /= popularity.sum()
 
-    out_src: list[int] = []
-    out_dst: list[int] = []
-    out_relation: list[int] = []
-    out_level: list[int] = []
-    out_origin: list[int] = []
+    uniform = strategy == 0
+    out_dst[uniform] = rng.integers(graph.num_nodes, size=int(uniform.sum()))
 
-    for position in range(len(src)):
-        base = (
-            int(src[position]),
-            int(dst[position]),
-            int(relation[position]),
-            int(level[position]),
-        )
-        for draw in range(per_edge):
-            new_src, new_dst, new_relation, new_level = base
-            strategy = draw % 5
+    popular = strategy == 1
+    out_dst[popular] = rng.choice(graph.num_nodes, size=int(popular.sum()), p=popularity)
 
-            if strategy == 0:
-                new_dst = int(rng.integers(graph.num_nodes))
-            elif strategy == 1:
-                new_dst = int(rng.choice(graph.num_nodes, p=popularity))
-            elif strategy == 2:
-                new_src = int(rng.integers(graph.num_nodes))
-            elif strategy == 3 and RelationType(new_relation) in LEVEL_CARRYING:
-                if new_level >= _MAX_LEVEL:
-                    step = -1
-                elif new_level <= _MIN_LEVEL:
-                    step = 1
-                else:
-                    step = int(rng.choice([-1, 1]))
-                new_level = int(np.clip(new_level + step, _MIN_LEVEL, _MAX_LEVEL))
-            else:
-                candidate = _two_hop(neighbours, new_src, rng)
-                new_dst = candidate if candidate >= 0 else int(rng.integers(graph.num_nodes))
+    swapped = strategy == 2
+    out_src[swapped] = rng.integers(graph.num_nodes, size=int(swapped.sum()))
 
-            if (new_src, new_dst, new_relation, new_level) == base:
-                # A corruption that changed nothing is not a negative. Fall back to
-                # the uniform object swap, retrying until it lands elsewhere.
-                while new_dst == base[1]:
-                    new_dst = int(rng.integers(graph.num_nodes))
+    carries = np.isin(base_relation, [int(kind) for kind in LEVEL_CARRYING])
+    shifted = (strategy == 3) & carries
+    if shifted.any():
+        here = out_level[shifted]
+        step = np.where(rng.random(int(shifted.sum())) < 0.5, -1, 1)
+        step = np.where(here >= _MAX_LEVEL, -1, step)
+        step = np.where(here <= _MIN_LEVEL, 1, step)
+        out_level[shifted] = np.clip(here + step, _MIN_LEVEL, _MAX_LEVEL)
 
-            out_src.append(new_src)
-            out_dst.append(new_dst)
-            out_relation.append(new_relation)
-            out_level.append(new_level)
-            out_origin.append(position)
+    # A relation that carries no level has nothing for strategy four to move, so it
+    # falls through to the walk, exactly as the per-edge loop did.
+    walked = (strategy == 4) | ((strategy == 3) & ~carries)
+    if walked.any():
+        indptr, indices = undirected_csr(graph)
+        reached = _two_hop(indptr, indices, out_src[walked], rng)
+        fallback = rng.integers(graph.num_nodes, size=int(walked.sum()))
+        out_dst[walked] = np.where(reached >= 0, reached, fallback)
+
+    unchanged = (
+        (out_src == base_src)
+        & (out_dst == base_dst)
+        & (out_relation == base_relation)
+        & (out_level == base_level)
+    )
+    if unchanged.any() and graph.num_nodes > 1:
+        # A corruption that changed nothing is not a negative. Draw among the nodes
+        # other than the original object: the index is taken over `num_nodes - 1`
+        # and stepped over the one that must not come out, which is the loop-free
+        # form of the rejection the per-edge version used.
+        avoid = base_dst[unchanged]
+        drawn = rng.integers(graph.num_nodes - 1, size=int(unchanged.sum()))
+        out_dst[unchanged] = drawn + (drawn >= avoid)
 
     return CorruptedEdges(
-        src=np.array(out_src, dtype=np.int64),
-        dst=np.array(out_dst, dtype=np.int64),
-        relation=np.array(out_relation, dtype=np.int64),
-        level=np.array(out_level, dtype=np.int64),
-        origin=np.array(out_origin, dtype=np.int64),
+        src=out_src, dst=out_dst, relation=out_relation, level=out_level, origin=origin
     )
