@@ -1,10 +1,10 @@
-"""The likelihood head and the profile reconstruction head."""
+"""The likelihood head, the reconstruction head and the correspondence head."""
 
 import torch
 
 from rga.domain.relations import PermissionLevel, RelationType
 from rga.nn.config import ModelConfig
-from rga.nn.heads import EdgeLikelihoodHead, NodeReconstructionHead
+from rga.nn.heads import CorrespondenceHead, EdgeLikelihoodHead, NodeReconstructionHead
 
 CONFIG = ModelConfig(hidden_dim=8, embedding_dim=4, edge_hidden=8, dropout=0.0)
 
@@ -67,3 +67,28 @@ def test_deviation_grows_with_the_error() -> None:
     far = head.deviation(state, target + 1.0)
 
     assert (far > near).all()
+
+
+def test_the_correspondence_head_returns_one_logit_per_pair() -> None:
+    torch.manual_seed(1)
+    head = CorrespondenceHead(node_dim=8, context_dim=5, config=CONFIG).eval()
+
+    logits = head(torch.randn(4, 8), torch.randn(4, 8), torch.randn(4, 5))
+
+    assert logits.shape == (4,)
+
+
+def test_the_correspondence_head_reacts_to_the_context_row() -> None:
+    """The whole point: a different row must move the logit.
+
+    The likelihood head cannot learn this, because a positive and all of its
+    corrupted variants carry the same row and the gradient never tells them apart.
+    """
+    torch.manual_seed(2)
+    head = CorrespondenceHead(node_dim=8, context_dim=5, config=CONFIG).eval()
+    h_src, h_dst = torch.randn(1, 8), torch.randn(1, 8)
+
+    mine = head(h_src, h_dst, torch.zeros(1, 5))
+    theirs = head(h_src, h_dst, torch.ones(1, 5))
+
+    assert not torch.allclose(mine, theirs)

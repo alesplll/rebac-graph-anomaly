@@ -40,9 +40,12 @@ class RankTransform:
         return positions / float(self.reference.size)
 
 
-def combine(
-    likelihood_rank: np.ndarray, subject_rank: np.ndarray, object_rank: np.ndarray
-) -> np.ndarray:
-    """The anomaly score: equal weights over the three ranked terms."""
-    stacked = np.vstack([likelihood_rank, subject_rank, object_rank])
-    return stacked.mean(axis=0)
+def combine(*ranks: np.ndarray) -> np.ndarray:
+    """The anomaly score: equal weights over the ranked terms.
+
+    Three terms ordinarily — the likelihood and the two profile deviations. A model
+    carrying a correspondence head contributes a fourth.
+    """
+    if not ranks:
+        raise ValueError("combine needs at least one ranked term")
+    return np.vstack(ranks).mean(axis=0)

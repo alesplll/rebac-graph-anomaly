@@ -21,20 +21,26 @@ from rga.nn.candidates import CandidateArrays, edge_positions
 from rga.nn.config import ModelConfig
 from rga.nn.encoder import GraphEncoder
 from rga.nn.graph_tensors import graph_tensors
-from rga.nn.heads import EdgeLikelihoodHead, NodeReconstructionHead
+from rga.nn.heads import CorrespondenceHead, EdgeLikelihoodHead, NodeReconstructionHead
 from rga.nn.negatives import sample_negatives
 from rga.nn.node_inputs import NODE_INPUT_DIM, node_input_features, reconstruction_target
 from rga.nn.runtime import seed_torch
 
 
 class GnnModel(nn.Module):
-    """The encoder and both heads, trained together."""
+    """The encoder and its heads, trained together."""
 
-    def __init__(self, edge_dim: int, config: ModelConfig) -> None:
+    def __init__(self, edge_dim: int, config: ModelConfig, context_dim: int = 0) -> None:
         super().__init__()
         self.encoder = GraphEncoder(NODE_INPUT_DIM, config)
         self.likelihood = EdgeLikelihoodHead(config.hidden_dim, edge_dim, config)
         self.reconstruction = NodeReconstructionHead(config.hidden_dim, NODE_INPUT_DIM, config)
+        #: Present only when a context row was supplied and given a weight.
+        self.correspondence = (
+            CorrespondenceHead(config.hidden_dim, context_dim, config)
+            if config.correspondence_weight > 0.0 and context_dim > 0
+            else None
+        )
 
 
 def train_model(
@@ -44,8 +50,14 @@ def train_model(
     *,
     seed: int,
     device: torch.device,
+    context: np.ndarray | None = None,
 ) -> GnnModel:
-    """Fit the model on one training span and return it at its best epoch."""
+    """Fit the model on one training span and return it at its best epoch.
+
+    `context` is the candidate feature matrix as it stands before the likelihood
+    head's copy is blanked. It reaches the correspondence head only, which is the
+    whole point: the two heads are given different questions about the same change.
+    """
     rng = np.random.default_rng(seed)
     seed_torch(seed)
 
@@ -66,7 +78,11 @@ def train_model(
     # The graph does not move between epochs, so neither does what is reconstructed.
     targets = reconstruction_target(tensors, inputs, config)
 
-    model = GnnModel(edge_dim=arrays.features.shape[1], config=config).to(device)
+    context_dim = 0 if context is None else int(context.shape[1])
+    model = GnnModel(
+        edge_dim=arrays.features.shape[1], config=config, context_dim=context_dim
+    ).to(device)
+    context_tensor = None if context is None else torch.as_tensor(context, device=device)
     optimiser = torch.optim.AdamW(
         model.parameters(), lr=config.learning_rate, weight_decay=config.weight_decay
     )
@@ -119,6 +135,24 @@ def train_model(
         loss = loss + config.reconstruction_weight * F.mse_loss(
             model.reconstruction(h), targets
         )
+
+        if model.correspondence is not None and context_tensor is not None and fit.size > 1:
+            # A cyclic shift is a derangement: no change is ever paired with its own
+            # row, so a negative here is never accidentally a positive.
+            shift = int(rng.integers(1, fit.size))
+            strangers = fit_index[
+                torch.as_tensor((np.arange(fit.size) + shift) % fit.size, device=device)
+            ]
+            belongs = model.correspondence(
+                h[src[fit_index]], h[dst[fit_index]], context_tensor[fit_index]
+            )
+            borrowed = model.correspondence(
+                h[src[fit_index]], h[dst[fit_index]], context_tensor[strangers]
+            )
+            loss = loss + config.correspondence_weight * (
+                F.binary_cross_entropy_with_logits(belongs, torch.ones_like(belongs))
+                + F.binary_cross_entropy_with_logits(borrowed, torch.zeros_like(borrowed))
+            )
 
         optimiser.zero_grad(set_to_none=True)
         loss.backward()

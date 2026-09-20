@@ -46,6 +46,7 @@ class GnnScorer:
         self._std: np.ndarray | None = None
         self._likelihood_rank: RankTransform | None = None
         self._deviation_rank: RankTransform | None = None
+        self._correspondence_rank: RankTransform | None = None
 
 
     @property
@@ -70,17 +71,37 @@ class GnnScorer:
             "std": self._std,
             "likelihood_reference": self._likelihood_rank.reference,
             "deviation_reference": self._deviation_rank.reference,
+            "context_dim": self._context_dim(),
+            "correspondence_reference": (
+                np.empty(0, dtype=np.float64)
+                if self._correspondence_rank is None
+                else self._correspondence_rank.reference
+            ),
         }
+
+    def _context_dim(self) -> int:
+        """Width of the row the correspondence head reads, zero when it has none."""
+        if self._model is None or self._model.correspondence is None:
+            return 0
+        first = self._model.correspondence.mlp[0]
+        return int(first.in_features) - 2 * self._config.hidden_dim
 
     def restore_from_artifact(self, state: dict[str, object]) -> None:
         """Rebuild a fitted scorer from `state_for_artifact`."""
-        model = GnnModel(edge_dim=int(state["edge_dim"]), config=self._config)  # type: ignore[arg-type]
+        # Artefacts written before the correspondence head existed carry neither key.
+        model = GnnModel(
+            edge_dim=int(state["edge_dim"]),  # type: ignore[arg-type]
+            config=self._config,
+            context_dim=int(state.get("context_dim", 0)),  # type: ignore[arg-type]
+        )
         model.load_state_dict(state["weights"])  # type: ignore[arg-type]
         self._model = model.to(self._device).eval()
         self._mean = np.asarray(state["mean"])
         self._std = np.asarray(state["std"])
         self._likelihood_rank = RankTransform(np.asarray(state["likelihood_reference"]))
         self._deviation_rank = RankTransform(np.asarray(state["deviation_reference"]))
+        reference = np.asarray(state.get("correspondence_reference", np.empty(0)))
+        self._correspondence_rank = RankTransform(reference) if reference.size else None
 
     def fit(self, train: CandidateSet) -> None:
         """Train on the span and record what the rank transform needs."""
@@ -88,15 +109,25 @@ class GnnScorer:
             raise ValueError("the candidate set carries no graph; the network needs one")
 
         arrays, mean, std = candidate_arrays(train)
+        context = arrays.features
         arrays = without_features(arrays)
         self._mean, self._std = mean, std
         self._model = train_model(
-            train.graph, arrays, self._config, seed=self._seed, device=self._device
+            train.graph,
+            arrays,
+            self._config,
+            seed=self._seed,
+            device=self._device,
+            context=context if self._config.correspondence_weight > 0.0 else None,
         )
 
         state, deviation = self._encode(train.graph)
         self._likelihood_rank = RankTransform.fit(1.0 - self._likelihood(state, arrays))
         self._deviation_rank = RankTransform.fit(deviation)
+        if self._model.correspondence is not None:
+            self._correspondence_rank = RankTransform.fit(
+                1.0 - self._correspondence(state, arrays, context)
+            )
 
     def score(self, candidates: CandidateSet) -> np.ndarray:
         """One score per candidate in [0, 1], higher meaning more unusual."""
@@ -108,14 +139,19 @@ class GnnScorer:
 
         state, deviation = self._encode(candidates.graph)
         arrays, _, _ = candidate_arrays(candidates, mean=self._mean, std=self._std)
-        unlikeliness = self._likelihood_rank.apply(
-            1.0 - self._likelihood(state, without_features(arrays))
-        )
-        return combine(
-            unlikeliness,
+        stripped = without_features(arrays)
+        terms = [
+            self._likelihood_rank.apply(1.0 - self._likelihood(state, stripped)),
             self._node_rank(deviation, arrays.src),
             self._node_rank(deviation, arrays.dst),
-        )
+        ]
+        if self._model.correspondence is not None and self._correspondence_rank is not None:
+            terms.append(
+                self._correspondence_rank.apply(
+                    1.0 - self._correspondence(state, stripped, arrays.features)
+                )
+            )
+        return combine(*terms)
 
     def margins(self, candidates: CandidateSet) -> np.ndarray:
         """Unlikeliness before the rank transform, for explanation to work with.
@@ -168,6 +204,25 @@ class GnnScorer:
                 torch.as_tensor(arrays.relation, device=self._device),
                 torch.as_tensor(arrays.level, device=self._device),
                 torch.as_tensor(arrays.features, device=self._device),
+            )
+        return torch.sigmoid(logits).cpu().numpy()
+
+    def _correspondence(
+        self, state: torch.Tensor, arrays: CandidateArrays, context: np.ndarray
+    ) -> np.ndarray:
+        """Probability the model gives to the row having come with the change."""
+        assert self._model is not None and self._model.correspondence is not None
+        padded = torch.cat([state, torch.zeros(1, state.shape[1], device=self._device)])
+        unknown = padded.shape[0] - 1
+
+        def endpoints(index: np.ndarray) -> torch.Tensor:
+            return torch.as_tensor(np.where(index < 0, unknown, index), device=self._device)
+
+        with torch.no_grad():
+            logits = self._model.correspondence(
+                padded[endpoints(arrays.src)],
+                padded[endpoints(arrays.dst)],
+                torch.as_tensor(context, device=self._device),
             )
         return torch.sigmoid(logits).cpu().numpy()
 

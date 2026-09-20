@@ -1,6 +1,7 @@
-"""Rank transform and the three-term anomaly score."""
+"""Rank transform and the anomaly score built out of ranked terms."""
 
 import numpy as np
+import pytest
 
 from rga.nn.scoring import NEUTRAL, RankTransform, combine
 
@@ -41,3 +42,15 @@ def test_the_score_averages_the_three_terms() -> None:
 
 def test_a_neutral_term_is_the_middle_of_the_range() -> None:
     assert NEUTRAL == 0.5
+
+
+def test_combine_accepts_a_fourth_term() -> None:
+    """A model with a correspondence head contributes one more ranked quantity."""
+    ranks = [np.array([0.0, 1.0]) for _ in range(4)]
+
+    assert combine(*ranks).tolist() == [0.0, 1.0]
+
+
+def test_combine_refuses_to_average_nothing() -> None:
+    with pytest.raises(ValueError, match="at least one"):
+        combine()

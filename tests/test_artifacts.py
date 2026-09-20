@@ -1,5 +1,6 @@
 """A fitted scorer survives a trip through the filesystem."""
 
+from dataclasses import replace
 from pathlib import Path
 
 import numpy as np
@@ -71,3 +72,32 @@ def test_an_artefact_from_another_feature_space_is_refused(spans, tmp_path) -> N
 def test_saving_before_fitting_is_refused(tmp_path) -> None:
     with pytest.raises(RuntimeError, match="fit"):
         save_scorer(tmp_path / "artifact", GnnScorer(seed=0, config=FAST), dataset="x")
+
+
+def test_a_correspondence_model_survives_the_round_trip(spans, tmp_path) -> None:
+    """The head exists only when the configuration asks for it, so it must be saved.
+
+    Were it missing on the way back, `load_state_dict` would refuse the extra
+    weights; were its rank transform missing, the fourth term would silently vanish
+    and the scores would move.
+    """
+    train, evaluation = spans
+    scorer = GnnScorer(seed=3, config=replace(FAST, correspondence_weight=1.0))
+    scorer.fit(train)
+    before = scorer.score(evaluation)
+
+    save_scorer(tmp_path / "artifact", scorer, dataset="small-history")
+    after = load_scorer(tmp_path / "artifact").score(evaluation)
+
+    assert np.allclose(before, after, atol=1e-6)
+
+
+def test_the_fourth_term_changes_the_ranking(spans) -> None:
+    """Without this the head could be dead weight and every test would still pass."""
+    train, evaluation = spans
+    plain = GnnScorer(seed=3, config=FAST)
+    plain.fit(train)
+    with_head = GnnScorer(seed=3, config=replace(FAST, correspondence_weight=1.0))
+    with_head.fit(train)
+
+    assert not np.allclose(plain.score(evaluation), with_head.score(evaluation))

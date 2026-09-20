@@ -9,6 +9,11 @@ feature-group study would have nothing to say about it.
 The reconstruction head rebuilds a node's structural profile from its
 representation. The squared error is how much that node departs from what the graph
 around it would lead one to expect.
+
+The correspondence head exists because the contrastive objective cannot train the
+feature weights of the likelihood head: it corrupts structure only, so a positive
+and every negative made from it carry the same row. This head asks a question the
+row does decide.
 """
 
 from __future__ import annotations
@@ -73,3 +78,28 @@ class NodeReconstructionHead(nn.Module):
     def deviation(self, h: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
         """Mean squared reconstruction error per node."""
         return (self.mlp(h) - target).pow(2).mean(dim=1)
+
+
+class CorrespondenceHead(nn.Module):
+    """Does this context row belong to this change?
+
+    Trained alongside the likelihood head but never mixed into its logit, so what it
+    learns can be measured on its own. Its negatives are made by handing a change
+    somebody else's row while leaving the structure alone — the mirror image of the
+    contrastive task, which leaves the row alone and corrupts the structure.
+    """
+
+    def __init__(self, node_dim: int, context_dim: int, config: ModelConfig) -> None:
+        super().__init__()
+        self.mlp = nn.Sequential(
+            nn.Linear(2 * node_dim + context_dim, config.edge_hidden),
+            nn.GELU(),
+            nn.Dropout(config.dropout),
+            nn.Linear(config.edge_hidden, 1),
+        )
+
+    def forward(
+        self, h_src: torch.Tensor, h_dst: torch.Tensor, context: torch.Tensor
+    ) -> torch.Tensor:
+        """Logits: high means the row and the change belong together."""
+        return self.mlp(torch.cat([h_src, h_dst, context], dim=1)).squeeze(1)

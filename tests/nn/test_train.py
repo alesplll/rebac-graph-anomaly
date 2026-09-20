@@ -1,5 +1,6 @@
 """Candidate arrays and the self-supervised training loop."""
 
+from dataclasses import replace
 from pathlib import Path
 
 import numpy as np
@@ -11,7 +12,7 @@ from rga.generator.config import load_dataset_config
 from rga.generator.dataset import build_dataset
 from rga.nn.candidates import candidate_arrays, edge_positions
 from rga.nn.config import ModelConfig
-from rga.nn.train import train_model
+from rga.nn.train import GnnModel, train_model
 
 CPU = torch.device("cpu")
 CONFIG = load_dataset_config(Path("configs/generator/small.yaml"))
@@ -99,3 +100,13 @@ def test_a_different_seed_gives_a_different_model(train_set) -> None:
         for left, right in zip(first.parameters(), other.parameters(), strict=True)
     ]
     assert max(deviations) > 1e-4
+
+
+def test_the_correspondence_head_appears_only_when_configured() -> None:
+    """Three ways to end up without it, and all of them must hold."""
+    config = ModelConfig(hidden_dim=8, num_layers=1, epochs=1, patience=1)
+    weighted = replace(config, correspondence_weight=1.0)
+
+    assert GnnModel(edge_dim=4, config=config, context_dim=7).correspondence is None
+    assert GnnModel(edge_dim=4, config=weighted, context_dim=0).correspondence is None
+    assert GnnModel(edge_dim=4, config=weighted, context_dim=7).correspondence is not None
