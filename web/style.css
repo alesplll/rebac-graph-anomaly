@@ -1,179 +1,215 @@
+/* Изменения прав доступа — журнал разбора.
+ *
+ * Это не панель приборов, а канцелярский журнал: каждая строка читается как
+ * фраза «кто — что получил — на что», и оформление служит этому чтению.
+ * Отсюда две опоры. Первая — сквозной цветовой код сущностей: пользователь,
+ * группа, бакет, объект окрашены одинаково в списке, в карточке и в легенде
+ * рисунка, так что взгляд опознаёт вид узла раньше, чем прочитает имя. Вторая —
+ * выравнивание: глаголы отношений стоят в своей колонке, и список можно читать
+ * вертикально по ним.
+ *
+ * Палитра холодная и служебная. Красный оставлен одному — уровню admin и
+ * самовыдаче; всё прочее тревожное несёт янтарь, иначе красным становится вся
+ * страница и он перестаёт что-либо значить. Одна светлая тема: на проекторе
+ * тёмная теряет контраст, на котором держатся цвета оценки.
+ */
+
 :root {
-  --ink: #1b1d21;
-  --muted: #6b7079;
-  --line: #dcdfe4;
-  --paper: #f6f7f9;
-  --card: #ffffff;
-  --accent: #1f5f8b;
+  --paper: #edf1f5;
+  --panel: #ffffff;
+  --rule: #d2dae3;
+  --rule-soft: #e6ebf1;
+  --ink: #15202f;
+  --muted: #58667a;
+  --faint: #8792a3;
 
-  --user: #2f6f4f;
-  --group: #1f5f8b;
-  --bucket: #7a5199;
-  --object: #8a6d1f;
+  --user: #1b4fa8;
+  --group: #2e6f4e;
+  --bucket: #8a5a12;
+  --object: #6b7686;
 
-  --hot: #c0392b;
-  --warm: #b4541f;
-  --mild: #b8912a;
-  --calm: #5b7f6b;
+  --calm: #6b7686;
+  --mild: #8a5a12;
+  --warm: #b4530a;
+  --hot: #a61b1b;
+
+  --mono: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace;
 }
 
 * { box-sizing: border-box; }
 
 body {
   margin: 0;
-  font: 15px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif;
-  color: var(--ink);
   background: var(--paper);
+  color: var(--ink);
+  font: 14px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
 }
+
+/* ── шапка ─────────────────────────────────────────────────────────────── */
 
 header {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
-  gap: 1rem;
-  padding: .9rem 1.5rem;
-  background: linear-gradient(90deg, #22303c, #2f4858);
-  color: #eef2f5;
+  gap: 24px;
+  flex-wrap: wrap;
+  padding: 16px 22px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--rule);
 }
-h1 { margin: 0; font-size: 1.1rem; font-weight: 600; letter-spacing: .01em; }
-#status { margin: .2rem 0 0; color: #b9c6d0; font-size: .82rem; }
+h1 { font-size: 20px; font-weight: 640; letter-spacing: -.015em; margin: 0; }
+header p { margin: 3px 0 0; color: var(--muted); font-size: 13px; max-width: 74ch; }
+.actions { display: flex; gap: 8px; align-items: center; }
 
-button {
+/* ── органы управления ─────────────────────────────────────────────────── */
+
+button, select, input, .back {
   font: inherit;
-  padding: .42rem .95rem;
-  border: 1px solid transparent;
+  font-size: 13px;
+  color: var(--ink);
+  background: var(--panel);
+  border: 1px solid var(--rule);
   border-radius: 5px;
-  background: #4d7ea8;
-  color: #fff;
-  cursor: pointer;
+  padding: 5px 11px;
 }
-button:hover { background: #3f6a8f; }
-#filters button { background: #fff; color: var(--accent); border-color: var(--line); }
-#filters button:hover { border-color: var(--accent); background: #eef4f9; }
+button, .back { cursor: pointer; text-decoration: none; white-space: nowrap; }
+button:hover, .back:hover { border-color: var(--faint); }
+.back { color: var(--user); }
+#refresh { background: var(--ink); border-color: var(--ink); color: var(--panel); }
+#refresh:hover { background: #22304a; border-color: #22304a; }
+:focus-visible { outline: 2px solid var(--user); outline-offset: 1px; }
 
-#filters {
-  display: flex;
-  align-items: center;
-  gap: .75rem;
-  padding: .55rem 1.5rem;
-  background: var(--card);
-  border-bottom: 1px solid var(--line);
-  font-size: .88rem;
-}
-#filters input, #filters select {
-  font: inherit; padding: .28rem .45rem;
-  border: 1px solid var(--line); border-radius: 4px;
-}
-#filters input { min-width: 22ch; }
-#counter { margin-left: auto; color: var(--muted); font-size: .84rem; }
+/* ── раскладка ─────────────────────────────────────────────────────────── */
 
 main {
   display: grid;
-  grid-template-columns: minmax(340px, 440px) 1fr;
-  height: calc(100vh - 108px);
+  grid-template-columns: minmax(0, 7fr) minmax(0, 6fr);
+  gap: 16px;
+  padding: 16px 22px 28px;
+  align-items: start;
 }
+.panel { background: var(--panel); border: 1px solid var(--rule); border-radius: 8px; }
+#card { padding: 20px 22px; }
+.hint { color: var(--muted); margin: 0; max-width: 62ch; }
 
-#queue { margin: 0; padding: 0; list-style: none; overflow-y: auto; background: var(--card); border-right: 1px solid var(--line); }
-#queue li { padding: .6rem .9rem; border-bottom: 1px solid var(--line); cursor: pointer; border-left: 4px solid transparent; }
-#queue li:hover { background: #f0f4f8; }
-#queue li.chosen { background: #e9f0f6; border-left-color: var(--accent); }
+.panel-head { padding: 12px 16px; border-bottom: 1px solid var(--rule); }
+.tally { margin: 0 0 10px; color: var(--muted); font-size: 13px; }
+.tally b { color: var(--ink); font-weight: 640; }
 
-.row-top { display: flex; align-items: baseline; gap: .5rem; }
-.rank { color: var(--muted); font-size: .78rem; min-width: 2.4rem; }
-.score { font-variant-numeric: tabular-nums; font-weight: 600; font-size: .85rem; }
-.row-when { margin-left: auto; color: var(--muted); font-size: .76rem; }
-.bar { height: 3px; border-radius: 2px; background: #eceef1; margin-top: .4rem; }
-.bar span { display: block; height: 100%; border-radius: 2px; }
+#filters { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: center; }
+#filters label { display: inline-flex; align-items: center; gap: 6px; color: var(--faint); font-size: 12px; }
+#filter-subject { width: 190px; }
+#find { border-left-width: 1px; }
 
-.chain { font-size: .84rem; margin-top: .25rem; word-break: break-all; }
-.node { font-family: ui-monospace, "Cascadia Code", Consolas, monospace; font-size: .82rem; padding: .04rem .2rem; border-radius: 3px; }
-.node.user { color: var(--user); background: #2f6f4f14; }
-.node.group { color: var(--group); background: #1f5f8b14; }
-.node.bucket { color: var(--bucket); background: #7a519914; }
-.node.object { color: var(--object); background: #8a6d1f14; }
-.arrow { color: var(--muted); }
+/* ── очередь ───────────────────────────────────────────────────────────── */
 
-.tag {
-  display: inline-block; font-size: .72rem; padding: .05rem .4rem;
-  border-radius: 3px; border: 1px solid currentColor; white-space: nowrap;
-}
-.tag.level { color: var(--warm); }
-.tag.alarm { color: var(--hot); }
-.tag.quiet { color: var(--muted); }
-
-#card { padding: 1.1rem 1.5rem 3rem; overflow-y: auto; }
-.hint { color: var(--muted); max-width: 46ch; }
-#card h2 { font-size: .82rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 1.5rem 0 .5rem; font-weight: 600; }
-#card h2:first-of-type { margin-top: 1rem; }
-
-.headline { display: flex; align-items: center; gap: .7rem; flex-wrap: wrap; }
-.headline .verdict { font-size: 1.5rem; font-weight: 700; font-variant-numeric: tabular-nums; }
-.headline .place { color: var(--muted); font-size: .85rem; }
-
-.facts { display: grid; grid-template-columns: max-content 1fr; gap: .3rem 1rem; margin: .8rem 0 0; font-size: .88rem; }
-.facts dt { color: var(--muted); }
-.facts dd { margin: 0; }
-.facts dd.unknown { color: var(--muted); font-style: italic; }
-
-#picture svg { width: 100%; height: auto; background: var(--card); border: 1px solid var(--line); border-radius: 6px; }
-.legend { display: flex; gap: .9rem; flex-wrap: wrap; margin-top: .4rem; font-size: .76rem; color: var(--muted); }
-.legend span::before { content: ""; display: inline-block; width: .7rem; height: .7rem; border-radius: 2px; margin-right: .3rem; vertical-align: -1px; }
-.legend .l-user::before { background: var(--user); }
-.legend .l-group::before { background: var(--group); }
-.legend .l-bucket::before { background: var(--bucket); }
-.legend .l-object::before { background: var(--object); }
-.legend .l-change::before { background: var(--hot); }
-
-#card ul { margin: 0; padding-left: 1.1rem; }
-#card ul li { margin-bottom: .2rem; }
-
-.caption { margin: .5rem 0 0; color: var(--muted); font-size: .8rem; line-height: 1.5; max-width: 72ch; }
-.caption b { color: var(--ink); }
-
-.observations { list-style: none; padding-left: 0; }
-.observations li { margin-bottom: .7rem; padding-left: .8rem; border-left: 3px solid var(--line); }
-.observations .said { display: block; }
-.observations .why { display: block; color: var(--muted); font-size: .84rem; margin-top: .15rem; max-width: 74ch; }
-
-table { border-collapse: collapse; width: 100%; font-size: .85rem; background: var(--card); }
-th, td { text-align: left; padding: .32rem .55rem; border-bottom: 1px solid var(--line); }
-th { color: var(--muted); font-weight: 500; font-size: .78rem; }
-td.number { text-align: right; font-variant-numeric: tabular-nums; }
-tr.unobserved td { color: var(--muted); font-style: italic; }
-td.up { color: var(--warm); }
-td.down { color: var(--accent); }
-
-.actions { display: flex; align-items: center; gap: .8rem; }
-a.back { color: #cfe0ec; text-decoration: none; font-size: .86rem; border-bottom: 1px dotted #7d99ad; }
-a.back:hover { color: #fff; }
-
-#reference { padding: 1.2rem 1.5rem 4rem; max-width: 86ch; }
-#reference h2 { font-size: .85rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 2rem 0 .6rem; }
-#reference h3 { font-size: 1rem; margin: 1rem 0 .3rem; }
-#reference .lead { color: var(--ink); max-width: 76ch; }
-#reference .entry { border-left: 3px solid var(--line); padding-left: .9rem; margin-bottom: 1rem; }
-#reference .entry p { margin: .25rem 0; max-width: 76ch; }
-#reference .look { color: var(--muted); font-size: .88rem; }
-#reference table { margin-bottom: 1rem; }
-.mono { font-family: ui-monospace, "Cascadia Code", Consolas, monospace; font-size: .78rem; color: var(--muted); }
-
-.picture-box { margin-top: 1.6rem; border-top: 1px solid var(--line); padding-top: .8rem; }
-.picture-box summary { cursor: pointer; font-size: .82rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 600; }
-.picture-box[open] summary { margin-bottom: .6rem; }
-
-/* ---- the state of a change -------------------------------------------- */
-
-.state-pick {
-  margin-left: auto;
-  font: inherit;
-  font-size: 11px;
-  padding: 1px 4px;
-  border: 1px solid #d0d6e0;
-  border-radius: 4px;
-  background: #fff;
-  color: #444c5a;
+#queue { list-style: none; margin: 0; padding: 0; max-height: calc(100vh - 230px); overflow: auto; }
+#queue li {
+  display: grid;
+  grid-template-columns: 2.4rem 4.2rem minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: 4px 12px;
+  padding: 9px 16px;
+  border-bottom: 1px solid var(--rule-soft);
   cursor: pointer;
 }
-.state-pick:hover { border-color: #9aa3b2; }
-.state-pick.dismissed { color: #5d6675; background: #eef1f6; }
-.state-pick.revoked { color: #b3261e; border-color: #b3261e; }
+#queue li:last-child { border-bottom: 0; }
+#queue li:hover { background: #f5f8fb; }
+#queue li.chosen { background: #eef4fd; box-shadow: inset 3px 0 0 var(--user); }
+
+.rank { color: var(--faint); font-size: 12px; font-variant-numeric: tabular-nums; text-align: right; }
+
+/* Число и полоса под ним — одно и то же, прочитанное двумя способами: точно
+   вблизи и приблизительно с дальнего ряда. */
+.score { font-size: 13px; font-weight: 640; font-variant-numeric: tabular-nums; }
+.bar { grid-column: 2; height: 2px; background: var(--rule-soft); border-radius: 2px; }
+.bar span { display: block; height: 100%; border-radius: 2px; }
+
+.chain { grid-column: 3; min-width: 0; }
+.chain .verb { color: var(--muted); }
+.row-when { grid-column: 3; color: var(--faint); font-size: 12px; }
+.row-top { display: contents; }
+
+.node { font-family: var(--mono); font-size: 12.5px; }
+.node.user { color: var(--user); }
+.node.group { color: var(--group); }
+.node.bucket { color: var(--bucket); }
+.node.object { color: var(--object); }
+.arrow { color: var(--faint); }
+
+.tag { font-size: 11px; padding: 1px 7px; border-radius: 999px; border: 1px solid var(--rule); white-space: nowrap; }
+.tag.level { color: var(--bucket); border-color: var(--bucket); }
+.tag.alarm { color: var(--hot); border-color: var(--hot); }
+
+.state-pick {
+  grid-column: 4;
+  grid-row: 1 / span 3;
+  align-self: center;
+  font-size: 12px;
+  padding: 3px 7px;
+  color: var(--muted);
+  cursor: pointer;
+}
+.state-pick.dismissed { background: var(--paper); }
+.state-pick.revoked { color: var(--hot); border-color: var(--hot); }
+
+/* ── карточка ──────────────────────────────────────────────────────────── */
+
+.headline { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+.verdict { font-size: 28px; font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: -.02em; }
+.place { color: var(--muted); font-size: 13px; }
+
+.facts { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 4px 16px; margin: 16px 0; }
+.facts dt { color: var(--faint); font-size: 13px; }
+.facts dd { margin: 0; }
+.facts dd.unknown { color: var(--faint); font-style: italic; }
+
+h2 { font-size: 15px; font-weight: 640; margin: 22px 0 8px; }
+h2:first-child { margin-top: 0; }
+
+.observations { margin: 8px 0; padding-left: 20px; max-width: 64ch; }
+.observations li { margin-bottom: 5px; }
+.caption { color: var(--muted); font-size: 12.5px; margin: 8px 0 0; max-width: 64ch; }
+.lead { color: var(--muted); max-width: 64ch; }
+.mono { font-family: var(--mono); font-size: 11.5px; color: var(--faint); }
+
+table { border-collapse: collapse; width: 100%; font-size: 13px; }
+th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--rule-soft); vertical-align: top; }
+thead th { color: var(--faint); font-weight: 500; font-size: 12px; border-bottom: 1px solid var(--rule); }
+tbody tr:last-child td { border-bottom: 0; }
+td.number { text-align: right; font-variant-numeric: tabular-nums; }
+td.up { color: var(--hot); }
+td.down { color: var(--group); }
+tr.unobserved td { color: var(--faint); font-style: italic; }
+
+.legend { display: flex; gap: 14px; flex-wrap: wrap; color: var(--muted); font-size: 12.5px; margin-top: 10px; }
+.legend span::before { content: "■ "; }
+.l-user { color: var(--user); }
+.l-group { color: var(--group); }
+.l-bucket { color: var(--bucket); }
+.l-object { color: var(--object); }
+.l-change { color: var(--hot); }
+
+.picture-box { margin-top: 18px; }
+details summary { cursor: pointer; color: var(--user); font-size: 13px; }
+svg { max-width: 100%; height: auto; margin-top: 10px; }
+a { color: var(--user); }
+
+/* Справочник делит эту таблицу стилей с очередью. */
+#reference { margin: 16px 22px 28px; padding: 20px 22px; background: var(--panel); border: 1px solid var(--rule); border-radius: 8px; }
+.entry { margin-bottom: 18px; max-width: 74ch; }
+.look { color: var(--muted); font-size: 13px; }
+
+/* Разобранная строка уходит из списка — единственное движение на странице, и
+   оно отвечает на действие, а не привлекает внимание само по себе. */
+#queue li.leaving { opacity: 0; transition: opacity .18s ease-out; }
+
+@media (prefers-reduced-motion: reduce) {
+  #queue li.leaving { transition: none; }
+}
+
+@media (max-width: 1080px) {
+  main { grid-template-columns: 1fr; }
+  #queue { max-height: none; }
+}

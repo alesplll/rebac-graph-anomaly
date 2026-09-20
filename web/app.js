@@ -22,6 +22,19 @@ const statusLine = document.getElementById("status");
 const counter = document.getElementById("counter");
 
 const KIND = ["user", "group", "bucket", "object"];
+
+// The engine's names are machine strings; a person reads a sentence. Rendering the
+// relation as a verb turns every row into one: "user:b053… входит в group:ops-0".
+const VERBS = {
+  HAS_PERMISSION: "получает право на",
+  MEMBER_OF: "входит в",
+  PARENT_OF: "содержит",
+  OWNER_OF: "владеет",
+};
+
+function verb(relation) {
+  return VERBS[relation] || String(relation).toLowerCase().replace(/_/g, " ");
+}
 let GLOSSARY = {};
 let GROUPS = {};
 const WEEKDAYS = ["воскресенье", "понедельник", "вторник", "среда", "четверг", "пятница", "суббота"];
@@ -82,11 +95,12 @@ async function get(path, params) {
 
 async function loadStatus() {
   const body = await get("/api/status");
-  const source = body.source === "synthetic" ? "синтетика" : "живой opens3-rebac";
-  const window_ = when(body.window.end);
+  const source = body.source === "synthetic"
+    ? "сгенерированная организация" : "живой opens3-rebac";
+  const edge = when(body.window.end);
   statusLine.textContent =
-    `${source} · уровень возможностей ${body.capability_level} · модель ${body.scorer} · ` +
-    `окно до ${window_.date} · ${body.candidates} изменений · обновлено ${body.refreshed_at}`;
+    `Источник — ${source}, уровень возможностей ${body.capability_level}. ` +
+    `Ранжирует ${body.scorer}. Окно заканчивается ${edge.date}.`;
 }
 
 // The state filter is one control on screen but two parameters on the wire: the
@@ -125,6 +139,10 @@ async function setState(id, chosen) {
     statusLine.textContent = "Состояние не записано, попробуйте ещё раз";
     return;
   }
+  // The row fades before the list is rebuilt, so a decision is visible as it takes
+  // effect rather than the list silently jumping.
+  const row = queue.querySelector(`li[data-id="${id}"]`);
+  if (row) row.classList.add("leaving");
   await loadQueue();
 }
 
@@ -143,25 +161,28 @@ function stateControl(item) {
 
 async function loadQueue() {
   const body = await get("/api/incidents", filters());
-  counter.textContent = `показано ${body.incidents.length} из ${body.total}`;
+  counter.innerHTML = body.incidents.length
+    ? `Открытых <b>${body.open}</b> из ${body.total}. Показано ${body.incidents.length}.`
+    : `Ничего не подошло. Открытых <b>${body.open}</b> из ${body.total}.`;
   queue.replaceChildren();
 
-  const highest = body.incidents.length ? body.incidents[0].score : 1;
   body.incidents.forEach((item) => {
     const row = document.createElement("li");
     row.dataset.id = item.id;
     const moment = when(item.ts);
     const level = item.level && item.level !== "none"
       ? ` <span class="tag level">${escapeHtml(item.level)}</span>` : "";
+    const own = item.actor && item.actor === item.subject
+      ? ' <span class="tag alarm">сам себе</span>' : "";
     row.innerHTML =
-      `<div class="row-top">
-         <span class="rank">#${item.rank}</span>
-         <span class="score" style="color:${heat(item.score)}">${item.score.toFixed(3)}</span>
-         <span class="row-when">${moment.date} ${moment.time}</span>
-         ${stateControl(item)}
-       </div>
-       <div class="chain">${node(item.subject)} <span class="arrow">—${escapeHtml(item.relation)}→</span> ${node(item.object)}${level}</div>
-       <div class="bar"><span style="width:${Math.max(4, (item.score / highest) * 100)}%;background:${heat(item.score)}"></span></div>`;
+      `<span class="rank">${item.rank}</span>
+       <span class="score" style="color:${heat(item.score)}">${item.score.toFixed(3)}</span>
+       <span class="chain">${node(item.subject)} <span class="verb">${
+         escapeHtml(verb(item.relation))}</span> ${node(item.object)}${level}${own}</span>
+       ${stateControl(item)}
+       <span class="bar"><span style="width:${
+         Math.max(3, item.score * 100)}%;background:${heat(item.score)}"></span></span>
+       <span class="row-when">${moment.date}, ${moment.time}</span>`;
     row.addEventListener("click", (event) => {
       // The state control lives inside the row; choosing in it is not opening it.
       if (event.target.dataset && event.target.dataset.state) return;
@@ -194,7 +215,7 @@ function factsBlock(body) {
     ${fact("кто выдал", initiator, "движок не записывает инициатора")}
     ${fact("кому", node(body.subject))}
     ${fact("на что", node(body.object))}
-    ${fact("что именно", `${escapeHtml(body.relation)}${
+    ${fact("что именно", `${escapeHtml(verb(body.relation))}${
       body.level && body.level !== "none" ? ` <span class="tag level">${escapeHtml(body.level)}</span>` : ""
     }`)}
     ${fact("когда", `${moment.date} ${moment.time} UTC, ${moment.weekday} ${marks.join(" ")}`)}
@@ -234,7 +255,8 @@ function edgeTable(edges) {
   const rows = edges.slice(0, 8).map((item) => {
     const direction = item.importance >= 0 ? "up" : "down";
     return `<tr>
-      <td>${node(item.subject)} <span class="arrow">—${escapeHtml(item.relation)}→</span> ${node(item.object)}</td>
+      <td>${node(item.subject)} <span class="arrow">${
+        escapeHtml(verb(item.relation))}</span> ${node(item.object)}</td>
       <td class="number ${direction}">${item.importance.toFixed(3)}</td></tr>`;
   }).join("");
   return `<table><thead><tr><th>связь</th><th>значимость</th></tr></thead><tbody>${rows}</tbody></table>`;

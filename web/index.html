@@ -3,13 +3,13 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Обзор изменений прав доступа</title>
+  <title>Изменения прав доступа</title>
   <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
   <header>
     <div>
-      <h1>Обзор изменений прав доступа</h1>
+      <h1>Изменения прав доступа</h1>
       <p id="status">Загрузка…</p>
     </div>
     <div class="actions">
@@ -18,36 +18,41 @@
     </div>
   </header>
 
-  <section id="filters">
-    <label>Субъект
-      <input id="filter-subject" type="text" placeholder="user:…">
-      <button id="find" type="button">Найти</button>
-    </label>
-    <label>Отношение
-      <select id="filter-relation">
-        <option value="">любое</option>
-        <option>HAS_PERMISSION</option>
-        <option>MEMBER_OF</option>
-        <option>PARENT_OF</option>
-        <option>OWNER_OF</option>
-      </select>
-    </label>
-    <label>Состояние
-      <select id="filter-state">
-        <option value="open">Открытые</option>
-        <option value="dismissed">Пропущенные</option>
-        <option value="revoked">Права отозваны</option>
-        <option value="all">Все</option>
-      </select>
-    </label>
-    <span id="counter"></span>
-  </section>
-
   <main>
-    <ol id="queue"></ol>
-    <article id="card">
-      <p class="hint">Выберите изменение из списка слева — система покажет, что в нём
-        необычного и на какие связи она при этом опиралась.</p>
+    <section class="panel">
+      <div class="panel-head">
+        <p id="counter" class="tally"></p>
+        <div id="filters">
+          <label>Субъект
+            <input id="filter-subject" type="text" placeholder="user:…">
+            <button id="find" type="button">Найти</button>
+          </label>
+          <label>Отношение
+            <select id="filter-relation">
+              <option value="">любое</option>
+              <option value="HAS_PERMISSION">получает право</option>
+              <option value="MEMBER_OF">входит в</option>
+              <option value="PARENT_OF">содержит</option>
+              <option value="OWNER_OF">владеет</option>
+            </select>
+          </label>
+          <label>Состояние
+            <select id="filter-state">
+              <option value="open">Открытые</option>
+              <option value="dismissed">Пропущенные</option>
+              <option value="revoked">Права отозваны</option>
+              <option value="all">Все</option>
+            </select>
+          </label>
+        </div>
+      </div>
+      <ol id="queue"></ol>
+    </section>
+
+    <article id="card" class="panel">
+      <p class="hint">Выберите изменение слева. Система покажет, что в нём
+        необычного и на какие связи она опиралась. Решение принимает специалист —
+        она лишь раскладывает основания.</p>
     </article>
   </main>
 
