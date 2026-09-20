@@ -171,3 +171,78 @@ def test_the_counts_cover_the_whole_queue_not_the_page(client_and_store) -> None
 
     assert len(payload["incidents"]) == 3
     assert payload["open"] > 3
+
+
+def test_search_matches_subject_object_and_actor(client_and_store) -> None:
+    client, _ = client_and_store
+    first = client.get("/api/incidents").json()["incidents"][0]
+    needle = first["subject"].split(":")[1][:8]
+
+    rows = client.get(f"/api/incidents?q={needle}").json()["incidents"]
+
+    assert rows
+    assert all(
+        needle in row["subject"] or needle in row["object"] or needle in (row["actor"] or "")
+        for row in rows
+    )
+
+
+def test_search_ignores_case(client_and_store) -> None:
+    client, _ = client_and_store
+    assert client.get("/api/incidents?q=USER%3A").json()["incidents"]
+
+
+def test_search_narrows_the_queue(client_and_store) -> None:
+    """A search that returns everything would prove nothing."""
+    client, _ = client_and_store
+    everything = client.get("/api/incidents").json()["incidents"]
+    needle = everything[0]["object"]
+
+    rows = client.get(f"/api/incidents?q={needle}").json()["incidents"]
+
+    assert 0 < len(rows) < len(everything)
+
+
+def test_resolved_can_be_narrowed_to_one_outcome(client_and_store) -> None:
+    client, store = client_and_store
+    rows = client.get("/api/incidents").json()["incidents"]
+    store.record([_decision_for(rows[0], "confirmed")])
+    store.record([_decision_for(rows[1], "false_positive")])
+
+    only = client.get("/api/incidents?state=resolved&outcome=confirmed").json()["incidents"]
+
+    assert [row["id"] for row in only] == [rows[0]["id"]]
+
+
+def test_no_grouping_by_default(client_and_store) -> None:
+    client, _ = client_and_store
+    assert client.get("/api/incidents").json()["groups"] == []
+
+
+def test_grouping_by_subject_counts_and_lists(client_and_store) -> None:
+    client, _ = client_and_store
+    payload = client.get("/api/incidents?group=subject").json()
+
+    groups = payload["groups"]
+    assert groups
+    assert sum(group["count"] for group in groups) == len(payload["incidents"])
+    assert all(group["count"] == len(group["incidents"]) for group in groups)
+    # A burst of grants from one subject is one of the planted patterns, so at
+    # least one subject must collect more than a single change.
+    assert max(group["count"] for group in groups) > 1
+
+
+def test_groups_are_ordered_by_their_worst_change(client_and_store) -> None:
+    client, _ = client_and_store
+    groups = client.get("/api/incidents?group=subject").json()["groups"]
+
+    scores = [group["top_score"] for group in groups]
+    assert scores == sorted(scores, reverse=True)
+
+
+def test_grouping_by_object_uses_the_object(client_and_store) -> None:
+    client, _ = client_and_store
+    payload = client.get("/api/incidents?group=object").json()
+
+    keys = {group["key"] for group in payload["groups"]}
+    assert keys == {row["object"] for row in payload["incidents"]}

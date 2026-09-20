@@ -26,6 +26,35 @@ from rga.service.triage import OPEN_OUTCOME, TriageStore
 WEB = Path("web")
 
 
+def _grouped(rows: list[dict[str, object]], by: str) -> list[dict[str, object]]:
+    """Collect the page into groups, worst group first.
+
+    Built from the rows that survived the filters and the limit rather than from the
+    whole queue: a heading promising eleven changes above a group showing three
+    would be worse than no heading at all.
+    """
+    if by == "none":
+        return []
+
+    collected: dict[str, list[dict[str, object]]] = {}
+    for row in rows:
+        collected.setdefault(str(row[by]), []).append(row)
+
+    return sorted(
+        (
+            {
+                "key": key,
+                "count": len(members),
+                "top_score": max(float(member["score"]) for member in members),
+                "incidents": [str(member["id"]) for member in members],
+            }
+            for key, members in collected.items()
+        ),
+        key=lambda item: float(item["top_score"]),  # type: ignore[arg-type]
+        reverse=True,
+    )
+
+
 def create_app(
     config: ServiceConfig, *, scorer=None, store: TriageStore | None = None
 ) -> FastAPI:
@@ -69,6 +98,9 @@ def create_app(
     def incidents(
         limit: int = Query(default=config.queue, ge=1, le=500),
         state: str = Query(default="open", pattern="^(open|resolved|all)$"),
+        group: str = Query(default="none", pattern="^(none|subject|object)$"),
+        q: str | None = None,
+        outcome: str | None = None,
         since: int | None = None,
         relation: str | None = None,
         subject: str | None = None,
@@ -105,6 +137,13 @@ def create_app(
                 continue
             if relation is not None and RelationType(key[1]).name != relation:
                 continue
+            if outcome is not None and (decision is None or decision.outcome != outcome):
+                continue
+            if q:
+                needle = q.casefold()
+                actor = analysis.candidates.actors[position] or ""
+                if not any(needle in part.casefold() for part in (key[0], key[2], actor)):
+                    continue
             if len(rows) >= limit:
                 continue
 
@@ -125,6 +164,7 @@ def create_app(
             "total": analysis.candidates.n_candidates,
             "open": open_count,
             "resolved": resolved_count,
+            "groups": _grouped(rows, group),
         }
 
     @app.get("/api/incidents/{incident}")
