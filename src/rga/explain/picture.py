@@ -5,10 +5,15 @@ testable. A layout written in the page's JavaScript fails silently — an except
 leaves an empty box and nothing says why — and this project has no browser in its
 test suite to notice.
 
-Laid out in columns by distance from the change instead of by a force simulation. At
-a dozen nodes a deterministic layout reads better, never jitters between redraws, and
-needs no library, which matters for a page that must open on a machine with no
-network.
+Laid out in lanes by kind of node — user, group, bucket, object — which is the path
+the authorization engine itself walks. Distance from the change was the obvious
+alternative and it read badly: a user and a group would land in the same column, so
+the line between them ran backwards and crossed everything else. By kind, every
+relationship points rightwards.
+
+A deterministic layout beats a force simulation here: at a dozen nodes it reads
+better, never jitters between redraws, and needs no library, which matters for a page
+that must open on a machine with no network.
 """
 
 from __future__ import annotations
@@ -16,19 +21,25 @@ from __future__ import annotations
 from html import escape
 
 #: A colour per kind of node, so a user is never mistaken for a bucket at a glance.
+#: These are the page's own entity colours; the drawing, the queue and the legend
+#: have to agree or the code stops being a code.
 TYPE_COLOUR = {
-    "user": "#2f6f4f",
-    "group": "#1f5f8b",
-    "bucket": "#7a5199",
-    "object": "#8a6d1f",
+    "user": "#1b4fa8",
+    "group": "#2e6f4e",
+    "bucket": "#8a5a12",
+    "object": "#6b7686",
 }
-_UNKNOWN_COLOUR = "#6b7079"
+_UNKNOWN_COLOUR = "#8792a3"
 
 #: The change under review, drawn apart from everything else.
-_CHANGE_COLOUR = "#c0392b"
+_CHANGE_COLOUR = "#a61b1b"
 #: A relationship that holds the score up, and one that pulls it down.
-_HOLDS_UP = "#b4541f"
-_PULLS_DOWN = "#1f5f8b"
+_HOLDS_UP = "#b4530a"
+_PULLS_DOWN = "#1b4fa8"
+
+#: Left to right, the order the authorization engine walks: a person is in a group,
+#: the group holds a right on a bucket, the bucket contains objects.
+_LANES = ("user", "group", "bucket", "object")
 
 _BOX = (186, 24)
 _ROW = 38
@@ -112,18 +123,26 @@ def render_subgraph(card: dict, *, edges: int = 8, untangle: bool = True) -> str
     if not nodes:
         return _empty("Связей вокруг этого изменения не нашлось.")
 
-    columns: dict[int, list[dict]] = {}
-    for node in sorted(nodes, key=lambda node: (node["hops"], node["id"])):
-        columns.setdefault(int(node["hops"]), []).append(node)
+    def lane(node: dict) -> int:
+        kind = str(node.get("type", ""))
+        return _LANES.index(kind) if kind in _LANES else len(_LANES)
+
+    occupied: dict[int, list[dict]] = {}
+    for node in sorted(nodes, key=lambda node: (lane(node), node["id"])):
+        occupied.setdefault(lane(node), []).append(node)
+
+    # A neighbourhood of users and buckets alone should not draw an empty middle,
+    # so the lanes nobody stands in are closed up.
+    columns = {index: occupied[key] for index, key in enumerate(sorted(occupied))}
 
     if untangle:
         columns = _untangled(columns, drawn)
 
     place: dict[str, tuple[int, int]] = {}
-    for hops, column in columns.items():
+    for position, column in columns.items():
         for index, node in enumerate(column):
             place[node["id"]] = (
-                _MARGIN + hops * _COLUMN,
+                _MARGIN + position * _COLUMN,
                 _MARGIN + index * _ROW,
             )
 

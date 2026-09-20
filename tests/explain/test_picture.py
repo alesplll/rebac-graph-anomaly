@@ -147,3 +147,83 @@ def test_the_caption_says_what_is_drawn(card) -> None:
     markup = render_subgraph(card)
 
     assert "до изменения" in markup
+
+
+def _boxes(markup: str) -> dict[str, float]:
+    """The left edge of every drawn node, by its identifier."""
+    import re
+
+    found = {}
+    for block in re.findall(r"<g>.*?</g>", markup, re.S):
+        name = re.search(r"<title>([^<]+)</title>", block)
+        x = re.search(r'<rect x="([-\d.]+)"', block)
+        if name and x:
+            found[name.group(1)] = float(x.group(1))
+    return found
+
+
+def _chain_card() -> dict:
+    """A user in a group, the group holding a right on a bucket holding an object."""
+    return {
+        "subject": "user:alice",
+        "object": "bucket:logs",
+        "relation": "HAS_PERMISSION",
+        "level": "admin",
+        "subgraph": {
+            "nodes": [
+                {"id": "user:alice", "type": "user", "hops": 0},
+                {"id": "group:devops", "type": "group", "hops": 1},
+                {"id": "bucket:logs", "type": "bucket", "hops": 0},
+                {"id": "object:logs/file-1", "type": "object", "hops": 2},
+            ],
+            "edges": [
+                {"subject": "user:alice", "relation": "MEMBER_OF",
+                 "object": "group:devops", "level": "none", "importance": 0.4},
+                {"subject": "group:devops", "relation": "HAS_PERMISSION",
+                 "object": "bucket:logs", "level": "admin", "importance": 0.3},
+                {"subject": "bucket:logs", "relation": "PARENT_OF",
+                 "object": "object:logs/file-1", "level": "none", "importance": 0.1},
+            ],
+        },
+    }
+
+
+def test_each_kind_of_node_gets_its_own_column() -> None:
+    """Columns follow the path the authorization engine itself walks.
+
+    Laying them out by distance from the change put a user and a group in the same
+    column, so the line between them ran backwards and crossed everything else.
+    A user is always left of a group, which is left of a bucket.
+    """
+    from rga.explain.picture import render_subgraph as render
+
+    at = _boxes(render(_chain_card()))
+
+    assert at["user:alice"] < at["group:devops"] < at["bucket:logs"] < at["object:logs/file-1"]
+
+
+def test_a_chain_is_drawn_without_a_single_crossing() -> None:
+    from rga.explain.picture import render_subgraph as render
+
+    assert _crossings(render(_chain_card())) == 0
+
+
+def test_empty_lanes_leave_no_gap() -> None:
+    """A neighbourhood of users and buckets alone must not draw an empty middle."""
+    from rga.explain.picture import render_subgraph as render
+
+    card = _chain_card()
+    card["subgraph"]["nodes"] = [
+        node for node in card["subgraph"]["nodes"] if node["type"] in ("user", "bucket")
+    ]
+    card["subgraph"]["edges"] = [
+        {"subject": "user:alice", "relation": "HAS_PERMISSION",
+         "object": "bucket:logs", "level": "admin", "importance": 0.4}
+    ]
+
+    at = _boxes(render(card))
+    gap = at["bucket:logs"] - at["user:alice"]
+
+    from rga.explain.picture import _COLUMN
+
+    assert gap == _COLUMN

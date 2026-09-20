@@ -84,16 +84,31 @@ button:hover, .back:hover { border-color: var(--faint); }
 
 main {
   display: grid;
-  grid-template-columns: minmax(0, 7fr) minmax(0, 6fr);
+  grid-template-columns: minmax(340px, 30fr) minmax(0, 70fr);
   gap: 16px;
   padding: 16px 22px 28px;
   align-items: start;
 }
 .panel { background: var(--panel); border: 1px solid var(--rule); border-radius: 8px; }
-#card { padding: 20px 22px; }
+#card {
+  padding: 20px 22px;
+  position: sticky;
+  top: 16px;
+  max-height: calc(100vh - 32px);
+  overflow: auto;
+}
 .hint { color: var(--muted); margin: 0; max-width: 62ch; }
 
-.panel-head { padding: 12px 16px; border-bottom: 1px solid var(--rule); }
+/* The head of the list stays put while the list runs past it. */
+.panel-head {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--rule);
+  position: sticky;
+  top: 0;
+  background: var(--panel);
+  border-radius: 8px 8px 0 0;
+  z-index: 1;
+}
 .tally { margin: 0 0 10px; color: var(--muted); font-size: 13px; }
 .tally b { color: var(--ink); font-weight: 640; }
 
@@ -104,7 +119,10 @@ main {
 
 /* ── очередь ───────────────────────────────────────────────────────────── */
 
-#queue { list-style: none; margin: 0; padding: 0; max-height: calc(100vh - 230px); overflow: auto; }
+/* The queue scrolls with the page, not inside a box of its own: a list you have to
+   find and scroll separately is a list you stop scrolling. The card keeps up by
+   sticking, so the evidence stays beside the row you are reading. */
+#queue { list-style: none; margin: 0; padding: 0; }
 #queue li {
   display: grid;
   grid-template-columns: 2.4rem 4.2rem minmax(0, 1fr) auto;
@@ -196,10 +214,25 @@ details summary { cursor: pointer; color: var(--user); font-size: 13px; }
 svg { max-width: 100%; height: auto; margin-top: 10px; }
 a { color: var(--user); }
 
-/* Справочник делит эту таблицу стилей с очередью. */
-#reference { margin: 16px 22px 28px; padding: 20px 22px; background: var(--panel); border: 1px solid var(--rule); border-radius: 8px; }
-.entry { margin-bottom: 18px; max-width: 74ch; }
+/* ── справочник ────────────────────────────────────────────────────────── */
+
+#reference {
+  margin: 16px auto 40px;
+  padding: 26px 30px;
+  max-width: 86ch;
+  background: var(--panel);
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+}
+#reference h2 { font-size: 17px; margin: 30px 0 10px; padding-top: 18px; border-top: 1px solid var(--rule); }
+#reference h2:first-child { margin-top: 0; padding-top: 0; border-top: 0; }
+#reference h3 { font-size: 14px; font-weight: 640; margin: 0 0 4px; }
+#reference p { margin: 0 0 6px; max-width: 72ch; }
+#reference table { margin-top: 10px; }
+
+.entry { margin-bottom: 18px; padding-left: 12px; border-left: 2px solid var(--rule); }
 .look { color: var(--muted); font-size: 13px; }
+.look b { color: var(--ink); font-weight: 600; }
 
 /* Разобранная строка уходит из списка — единственное движение на странице, и
    оно отвечает на действие, а не привлекает внимание само по себе. */
@@ -211,5 +244,5 @@ a { color: var(--user); }
 
 @media (max-width: 1080px) {
   main { grid-template-columns: 1fr; }
-  #queue { max-height: none; }
+  #card { position: static; max-height: none; }
 }
