@@ -129,8 +129,14 @@ class GnnScorer:
                 1.0 - self._correspondence(state, arrays, context)
             )
 
-    def score(self, candidates: CandidateSet) -> np.ndarray:
-        """One score per candidate in [0, 1], higher meaning more unusual."""
+    def terms(self, candidates: CandidateSet) -> dict[str, np.ndarray]:
+        """The ranked quantities the score averages, each still on its own.
+
+        Public because an average is only as good as its parts, and two of these
+        parts were found to point the wrong way — see `docs/thesis/score-terms.md`.
+        Separating them is how that was established, and it uses the labels, so it
+        is a diagnostic and never a way to choose weights.
+        """
         if self._model is None or self._likelihood_rank is None:
             raise RuntimeError("the gnn scorer must be fit before scoring")
 
@@ -140,18 +146,22 @@ class GnnScorer:
         state, deviation = self._encode(candidates.graph)
         arrays, _, _ = candidate_arrays(candidates, mean=self._mean, std=self._std)
         stripped = without_features(arrays)
-        terms = [
-            self._likelihood_rank.apply(1.0 - self._likelihood(state, stripped)),
-            self._node_rank(deviation, arrays.src),
-            self._node_rank(deviation, arrays.dst),
-        ]
+        parts = {
+            "likelihood": self._likelihood_rank.apply(
+                1.0 - self._likelihood(state, stripped)
+            ),
+            "subject_deviation": self._node_rank(deviation, arrays.src),
+            "object_deviation": self._node_rank(deviation, arrays.dst),
+        }
         if self._model.correspondence is not None and self._correspondence_rank is not None:
-            terms.append(
-                self._correspondence_rank.apply(
-                    1.0 - self._correspondence(state, stripped, arrays.features)
-                )
+            parts["correspondence"] = self._correspondence_rank.apply(
+                1.0 - self._correspondence(state, stripped, arrays.features)
             )
-        return combine(*terms)
+        return parts
+
+    def score(self, candidates: CandidateSet) -> np.ndarray:
+        """One score per candidate in [0, 1], higher meaning more unusual."""
+        return combine(*self.terms(candidates).values())
 
     def margins(self, candidates: CandidateSet) -> np.ndarray:
         """Unlikeliness before the rank transform, for explanation to work with.

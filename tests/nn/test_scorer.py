@@ -105,3 +105,26 @@ def test_the_ranking_ignores_the_candidate_feature_row(spans) -> None:
     after = scorer.score(replace(evaluation, matrix=replace(evaluation.matrix, values=moved)))
 
     assert np.array_equal(before, after)
+
+
+def test_the_terms_of_the_score_are_the_score(spans) -> None:
+    """Whatever `terms` reports must be exactly what `score` averages."""
+    train, evaluation = spans
+    scorer = GnnScorer(seed=5, config=FAST)
+    scorer.fit(train)
+
+    parts = scorer.terms(evaluation)
+
+    assert list(parts) == ["likelihood", "subject_deviation", "object_deviation"]
+    assert np.allclose(np.mean(list(parts.values()), axis=0), scorer.score(evaluation))
+
+
+def test_a_correspondence_model_reports_a_fourth_term(spans) -> None:
+    train, evaluation = spans
+    scorer = GnnScorer(seed=5, config=replace(FAST, correspondence_weight=1.0))
+    scorer.fit(train)
+
+    parts = scorer.terms(evaluation)
+
+    assert "correspondence" in parts
+    assert np.allclose(np.mean(list(parts.values()), axis=0), scorer.score(evaluation))

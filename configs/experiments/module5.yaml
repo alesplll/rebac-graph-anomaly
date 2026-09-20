@@ -1,0 +1,15 @@
+# The three self-supervised variants against each other and against the best
+# classical method. Same dataset, same seeds and same candidates as gnn.yaml, so
+# the only thing that differs is what the network is asked to learn:
+#   gnn                 the module 3 configuration, profile reconstruction
+#   gnn_neighbourhood   reconstructs the neighbourhood instead of the node
+#   gnn_correspondence  adds a head that asks whether the context row fits the change
+name: module5
+dataset: configs/generator/small-history.yaml
+seeds: [1, 2, 3, 4, 5]
+scorers:
+  - isolation_forest
+  - gnn
+  - gnn_neighbourhood
+  - gnn_correspondence
+ks: [20, 50, 100]
