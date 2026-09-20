@@ -1,50 +1,36 @@
-"""What the analyst decided, and when.
+"""What the analyst decided about a change.
 
-An append-only journal. A decision is never edited and never deleted: a change of
-mind adds a row, and the current state of an incident is its latest row. That is
-what makes the history worth keeping — the alternative, a mutable flag, answers
-"is this closed" and nothing else, while a security review asks "who decided what,
-and did anyone change their mind".
+Three states, and no more: a change is open until somebody looks at it, and once
+they have, it is either dismissed — nothing needs doing — or the rights were taken
+back. A fourth shade of "we are still thinking" is a queue that never empties.
 
-Each row carries a copy of the change it was about. The evaluation window moves and
-the source can be swapped, so an incident decided on yesterday may not exist in
-today's analysis; the history has to stay readable regardless.
+Kept in memory, on purpose. Decisions do not outlive the process, and no file is
+written anywhere; when they need to, `record`, `current` and `history` are the
+whole surface a durable store would have to offer.
 
-Nothing here ever reaches the model. These are human judgements about the very
-changes the model ranks, and feeding them back would turn every measured number
-into self-confirmation. `tests/test_layering.py` checks that mechanically.
+The journal only ever grows: changing your mind adds an entry, so the history says
+who decided what and when they decided otherwise. Nothing here ever reaches the
+model — these are human judgements about the very changes it ranks, and feeding them
+back would turn every measured number into self-confirmation.
+`tests/test_layering.py` checks that mechanically.
 """
 
 from __future__ import annotations
 
-import sqlite3
 from collections.abc import Sequence
 from dataclasses import dataclass
-from pathlib import Path
 
-#: Outcomes a decision may carry. `reopened` puts the incident back in the queue.
-OUTCOMES: tuple[str, ...] = ("confirmed", "false_positive", "accepted_risk", "reopened")
-#: The outcome that leaves an incident in the queue rather than taking it out.
+#: `reopened` is how a decided change goes back to being open.
+OUTCOMES: tuple[str, ...] = ("dismissed", "revoked", "reopened")
+#: The outcome that leaves a change in the queue rather than taking it out.
 OPEN_OUTCOME = "reopened"
-
-_SCHEMA = """
-CREATE TABLE IF NOT EXISTS decisions (
-    seq        INTEGER PRIMARY KEY AUTOINCREMENT,
-    incident   TEXT    NOT NULL,
-    outcome    TEXT    NOT NULL,
-    note       TEXT    NOT NULL DEFAULT '',
-    analyst    TEXT    NOT NULL DEFAULT 'analyst',
-    decided_at TEXT    NOT NULL,
-    subject    TEXT    NOT NULL,
-    relation   TEXT    NOT NULL,
-    object     TEXT    NOT NULL,
-    score      REAL    NOT NULL
-);
-CREATE INDEX IF NOT EXISTS decisions_incident ON decisions (incident);
-CREATE INDEX IF NOT EXISTS decisions_seq ON decisions (seq DESC);
-"""
-
-_COLUMNS = "seq, incident, outcome, note, analyst, decided_at, subject, relation, object, score"
+#: What each state is called on screen.
+TITLES: dict[str, str] = {
+    "open": "Открыто",
+    "dismissed": "Пропущено",
+    "revoked": "Права отозваны",
+    "reopened": "Открыто",
+}
 
 
 @dataclass(frozen=True)
@@ -68,6 +54,7 @@ class Decision:
             "seq": self.seq,
             "incident": self.incident,
             "outcome": self.outcome,
+            "title": TITLES.get(self.outcome, self.outcome),
             "note": self.note,
             "analyst": self.analyst,
             "decided_at": self.decided_at,
@@ -78,86 +65,42 @@ class Decision:
         }
 
 
-class TriageStore:
-    """The decision journal, kept in one SQLite file."""
+class MemoryStore:
+    """The decision journal, for as long as the service is running."""
 
-    def __init__(self, path: Path) -> None:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        # The service is one process, but the framework answers on a thread pool, so
-        # the connection crosses threads and leans on SQLite's own locking.
-        self._db = sqlite3.connect(path, check_same_thread=False)
-        self._db.row_factory = sqlite3.Row
-        self._db.executescript(_SCHEMA)
-        self._db.commit()
+    def __init__(self) -> None:
+        self._entries: list[Decision] = []
 
     def record(self, entries: Sequence[Decision]) -> None:
-        """Append one row per decision.
+        """Append one entry per decision.
 
-        Every outcome is checked before anything is written: a batch that is half
-        applied would leave the analyst unable to tell what they had decided.
+        Every outcome is checked before anything lands: a batch applied halfway
+        would leave the analyst unable to tell what they had decided.
         """
         for entry in entries:
             if entry.outcome not in OUTCOMES:
                 raise ValueError(f"unknown outcome: {entry.outcome!r}")
 
-        self._db.executemany(
-            "INSERT INTO decisions"
-            " (incident, outcome, note, analyst, decided_at,"
-            "  subject, relation, object, score)"
-            " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            [
-                (
-                    entry.incident,
-                    entry.outcome,
-                    entry.note,
-                    entry.analyst,
-                    entry.decided_at,
-                    entry.subject,
-                    entry.relation,
-                    entry.object,
-                    entry.score,
-                )
-                for entry in entries
-            ],
-        )
-        self._db.commit()
+        for entry in entries:
+            self._entries.append(
+                Decision(**{**entry.__dict__, "seq": len(self._entries) + 1})
+            )
 
     def current(self) -> dict[str, Decision]:
-        """The latest decision for every incident that has one."""
-        rows = self._db.execute(
-            f"SELECT {_COLUMNS} FROM decisions"
-            " WHERE seq IN (SELECT MAX(seq) FROM decisions GROUP BY incident)"
-        ).fetchall()
-        return {str(row["incident"]): _decision(row) for row in rows}
+        """The latest decision for every change that has one."""
+        latest: dict[str, Decision] = {}
+        for entry in self._entries:
+            latest[entry.incident] = entry
+        return latest
 
     def history(self, *, incident: str | None = None, limit: int = 200) -> tuple[Decision, ...]:
         """Recorded decisions, newest first."""
-        if incident is None:
-            rows = self._db.execute(
-                f"SELECT {_COLUMNS} FROM decisions ORDER BY seq DESC LIMIT ?", (limit,)
-            ).fetchall()
-        else:
-            rows = self._db.execute(
-                f"SELECT {_COLUMNS} FROM decisions WHERE incident = ? ORDER BY seq DESC LIMIT ?",
-                (incident, limit),
-            ).fetchall()
-        return tuple(_decision(row) for row in rows)
+        chosen = [
+            entry
+            for entry in reversed(self._entries)
+            if incident is None or entry.incident == incident
+        ]
+        return tuple(chosen[:limit])
 
     def close(self) -> None:
-        """Release the file."""
-        self._db.close()
-
-
-def _decision(row: sqlite3.Row) -> Decision:
-    return Decision(
-        seq=int(row["seq"]),
-        incident=str(row["incident"]),
-        outcome=str(row["outcome"]),
-        note=str(row["note"]),
-        analyst=str(row["analyst"]),
-        decided_at=str(row["decided_at"]),
-        subject=str(row["subject"]),
-        relation=str(row["relation"]),
-        object=str(row["object"]),
-        score=float(row["score"]),
-    )
+        """Nothing to release; kept so a durable store can slot in unchanged."""

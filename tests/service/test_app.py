@@ -12,7 +12,7 @@ from rga.nn.config import ModelConfig
 from rga.nn.supervised import SupervisedGnnScorer
 from rga.service.app import create_app
 from rga.service.config import load_service_config
-from rga.service.triage import Decision, TriageStore
+from rga.service.triage import Decision, MemoryStore
 
 FAST = ModelConfig(hidden_dim=16, num_layers=2, epochs=3, patience=3)
 
@@ -27,17 +27,16 @@ def fitted():
 
 
 @pytest.fixture(scope="module")
-def client(fitted, tmp_path_factory):
+def client(fitted):
     scorer, config = fitted
-    store = TriageStore(tmp_path_factory.mktemp("triage") / "t.db")
-    return TestClient(create_app(config, scorer=scorer, store=store))
+    return TestClient(create_app(config, scorer=scorer, store=MemoryStore()))
 
 
 @pytest.fixture
-def client_and_store(fitted, tmp_path):
-    """A client whose service writes its decisions to a throwaway journal."""
+def client_and_store(fitted):
+    """A client with a journal of its own, thrown away with the test."""
     scorer, config = fitted
-    store = TriageStore(tmp_path / "t.db")
+    store = MemoryStore()
     return TestClient(create_app(config, scorer=scorer, store=store)), store
 
 
@@ -135,7 +134,7 @@ def test_a_resolved_incident_leaves_the_queue(client_and_store) -> None:
     client, store = client_and_store
     first = client.get("/api/incidents").json()["incidents"][0]
 
-    store.record([_decision_for(first, "false_positive")])
+    store.record([_decision_for(first, "dismissed")])
 
     remaining = client.get("/api/incidents").json()
     assert first["id"] not in {row["id"] for row in remaining["incidents"]}
@@ -147,7 +146,7 @@ def test_a_reopened_incident_comes_back(client_and_store) -> None:
     client, store = client_and_store
     first = client.get("/api/incidents").json()["incidents"][0]
 
-    store.record([_decision_for(first, "confirmed")])
+    store.record([_decision_for(first, "revoked")])
     store.record([_decision_for(first, "reopened")])
 
     assert first["id"] in {row["id"] for row in client.get("/api/incidents").json()["incidents"]}
@@ -156,12 +155,12 @@ def test_a_reopened_incident_comes_back(client_and_store) -> None:
 def test_resolved_incidents_can_be_asked_for(client_and_store) -> None:
     client, store = client_and_store
     first = client.get("/api/incidents").json()["incidents"][0]
-    store.record([_decision_for(first, "accepted_risk")])
+    store.record([_decision_for(first, "dismissed")])
 
     rows = client.get("/api/incidents?state=resolved").json()["incidents"]
 
     assert [row["id"] for row in rows] == [first["id"]]
-    assert rows[0]["state"] == "accepted_risk"
+    assert rows[0]["state"] == "dismissed"
 
 
 def test_the_counts_cover_the_whole_queue_not_the_page(client_and_store) -> None:
@@ -206,10 +205,10 @@ def test_search_narrows_the_queue(client_and_store) -> None:
 def test_resolved_can_be_narrowed_to_one_outcome(client_and_store) -> None:
     client, store = client_and_store
     rows = client.get("/api/incidents").json()["incidents"]
-    store.record([_decision_for(rows[0], "confirmed")])
-    store.record([_decision_for(rows[1], "false_positive")])
+    store.record([_decision_for(rows[0], "revoked")])
+    store.record([_decision_for(rows[1], "dismissed")])
 
-    only = client.get("/api/incidents?state=resolved&outcome=confirmed").json()["incidents"]
+    only = client.get("/api/incidents?state=resolved&outcome=revoked").json()["incidents"]
 
     assert [row["id"] for row in only] == [rows[0]["id"]]
 
@@ -256,7 +255,7 @@ def test_a_decision_is_recorded_and_removes_the_change(client_and_store) -> None
         "/api/decisions",
         json={
             "incidents": [first["id"]],
-            "outcome": "accepted_risk",
+            "outcome": "dismissed",
             "note": "плановые работы",
         },
     )
@@ -274,7 +273,7 @@ def test_one_call_decides_several_changes(client_and_store) -> None:
 
     answer = client.post(
         "/api/decisions",
-        json={"incidents": [row["id"] for row in rows], "outcome": "false_positive"},
+        json={"incidents": [row["id"] for row in rows], "outcome": "dismissed"},
     )
 
     assert answer.json()["recorded"] == 3
@@ -287,7 +286,7 @@ def test_the_note_reaches_the_journal(client_and_store) -> None:
 
     client.post(
         "/api/decisions",
-        json={"incidents": [first["id"]], "outcome": "confirmed", "note": "передано в SOC"},
+        json={"incidents": [first["id"]], "outcome": "revoked", "note": "передано в SOC"},
     )
 
     assert client.get("/api/decisions").json()["decisions"][0]["note"] == "передано в SOC"
@@ -304,7 +303,7 @@ def test_an_unknown_outcome_is_refused(client_and_store) -> None:
 
 def test_an_empty_selection_is_refused(client_and_store) -> None:
     client, _ = client_and_store
-    answer = client.post("/api/decisions", json={"incidents": [], "outcome": "confirmed"})
+    answer = client.post("/api/decisions", json={"incidents": [], "outcome": "revoked"})
     assert answer.status_code == 422
 
 
@@ -313,7 +312,7 @@ def test_a_change_outside_the_window_is_still_recorded(client_and_store) -> None
     client, _ = client_and_store
 
     answer = client.post(
-        "/api/decisions", json={"incidents": ["deadbeefdeadbeef"], "outcome": "confirmed"}
+        "/api/decisions", json={"incidents": ["deadbeefdeadbeef"], "outcome": "revoked"}
     )
 
     assert answer.json() == {"recorded": 1, "unknown": ["deadbeefdeadbeef"]}
@@ -322,13 +321,13 @@ def test_a_change_outside_the_window_is_still_recorded(client_and_store) -> None
 def test_the_card_carries_its_decision_and_its_history(client_and_store) -> None:
     client, _ = client_and_store
     first = client.get("/api/incidents").json()["incidents"][0]
-    client.post("/api/decisions", json={"incidents": [first["id"]], "outcome": "confirmed"})
+    client.post("/api/decisions", json={"incidents": [first["id"]], "outcome": "revoked"})
     client.post("/api/decisions", json={"incidents": [first["id"]], "outcome": "reopened"})
 
     card = client.get(f"/api/incidents/{first['id']}").json()
 
     assert card["decision"]["outcome"] == "reopened"
-    assert [entry["outcome"] for entry in card["history"]] == ["reopened", "confirmed"]
+    assert [entry["outcome"] for entry in card["history"]] == ["reopened", "revoked"]
 
 
 def test_an_undecided_card_says_so(client_and_store) -> None:
@@ -352,3 +351,35 @@ def test_the_page_and_its_assets_are_always_revalidated(client) -> None:
     for path in ("/", "/static/app.js", "/static/style.css"):
         headers = client.get(path).headers
         assert headers.get("cache-control") == "no-cache", path
+
+
+def test_every_row_carries_a_readable_state(client_and_store) -> None:
+    """The page shows the state as a word, so the service is the one that names it."""
+    client, store = client_and_store
+    first = client.get("/api/incidents").json()["incidents"][0]
+    assert first["state"] == "open"
+    assert first["state_title"] == "Открыто"
+
+    store.record([_decision_for(first, "revoked", note="снял права")])
+    row = client.get("/api/incidents?state=resolved").json()["incidents"][0]
+
+    assert (row["state"], row["state_title"], row["note"]) == (
+        "revoked",
+        "Права отозваны",
+        "снял права",
+    )
+
+
+def test_a_reopened_change_reads_as_open(client_and_store) -> None:
+    client, store = client_and_store
+    first = client.get("/api/incidents").json()["incidents"][0]
+    store.record([_decision_for(first, "revoked")])
+    store.record([_decision_for(first, "reopened")])
+
+    row = next(
+        item
+        for item in client.get("/api/incidents").json()["incidents"]
+        if item["id"] == first["id"]
+    )
+
+    assert row["state_title"] == "Открыто"

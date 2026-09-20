@@ -29,3 +29,31 @@ def test_the_page_pronounces_no_verdict(name) -> None:
 
     for word in FORBIDDEN_WORDS:
         assert word not in text
+
+
+def test_the_page_offers_a_state_filter() -> None:
+    markup = (WEB / "index.html").read_text(encoding="utf-8")
+
+    assert 'id="filter-state"' in markup
+
+
+def test_each_row_gets_a_state_control() -> None:
+    """A change is triaged from the list, not only from the card."""
+    script = (WEB / "app.js").read_text(encoding="utf-8")
+
+    assert "data-state" in script
+    assert "/api/decisions" in script
+
+
+def test_the_page_and_the_service_agree_on_the_state_names() -> None:
+    """The row control must offer all three names, so it carries its own copy.
+
+    That copy is the risk: renaming a state in the service and not in the page would
+    leave the two disagreeing with nothing to notice it. This is what notices.
+    """
+    from rga.service.triage import TITLES
+
+    script = (WEB / "app.js").read_text(encoding="utf-8")
+
+    for state in ("open", "dismissed", "revoked"):
+        assert TITLES[state] in script, f"{state} is called {TITLES[state]!r} by the service"

@@ -77,12 +77,56 @@ async function loadStatus() {
     `окно до ${window_.date} · ${body.candidates} изменений · обновлено ${body.refreshed_at}`;
 }
 
+// The state filter is one control on screen but two parameters on the wire: the
+// service separates "has it been decided" from "what was decided".
+const VIEWS = {
+  open: { state: "open" },
+  dismissed: { state: "resolved", outcome: "dismissed" },
+  revoked: { state: "resolved", outcome: "revoked" },
+  all: { state: "all" },
+};
+
 function filters() {
+  const view = VIEWS[document.getElementById("filter-state").value] || VIEWS.open;
   return {
     subject: document.getElementById("filter-subject").value.trim(),
     relation: document.getElementById("filter-relation").value,
+    state: view.state,
+    outcome: view.outcome || "",
     limit: 50,
   };
+}
+
+// Changing the control is the decision. `open` is not an outcome the service knows —
+// it is the absence of one, which `reopened` restores.
+async function setState(id, chosen) {
+  const answer = await fetch("/api/decisions", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      incidents: [id],
+      outcome: chosen === "open" ? "reopened" : chosen,
+      note: "",
+    }),
+  });
+  if (!answer.ok) {
+    statusLine.textContent = "Состояние не записано, попробуйте ещё раз";
+    return;
+  }
+  await loadQueue();
+}
+
+function stateControl(item) {
+  const options = [
+    ["open", "Открыто"],
+    ["dismissed", "Пропущено"],
+    ["revoked", "Права отозваны"],
+  ]
+    .map(([value, title]) =>
+      `<option value="${value}"${value === item.state ? " selected" : ""}>${title}</option>`)
+    .join("");
+  return `<select class="state-pick ${escapeHtml(item.state)}" data-state="${
+    escapeHtml(item.id)}" title="Состояние разбора">${options}</select>`;
 }
 
 async function loadQueue() {
@@ -102,10 +146,15 @@ async function loadQueue() {
          <span class="rank">#${item.rank}</span>
          <span class="score" style="color:${heat(item.score)}">${item.score.toFixed(3)}</span>
          <span class="row-when">${moment.date} ${moment.time}</span>
+         ${stateControl(item)}
        </div>
        <div class="chain">${node(item.subject)} <span class="arrow">—${escapeHtml(item.relation)}→</span> ${node(item.object)}${level}</div>
        <div class="bar"><span style="width:${Math.max(4, (item.score / highest) * 100)}%;background:${heat(item.score)}"></span></div>`;
-    row.addEventListener("click", () => openCard(item.id));
+    row.addEventListener("click", (event) => {
+      // The state control lives inside the row; choosing in it is not opening it.
+      if (event.target.dataset && event.target.dataset.state) return;
+      openCard(item.id);
+    });
     queue.append(row);
   });
 }
@@ -221,6 +270,12 @@ document.getElementById("refresh").addEventListener("click", async () => {
   await loadQueue();
 });
 document.getElementById("apply").addEventListener("click", loadQueue);
+document.getElementById("filter-state").addEventListener("change", loadQueue);
+
+queue.addEventListener("change", (event) => {
+  const id = event.target.dataset && event.target.dataset.state;
+  if (id) setState(id, event.target.value);
+});
 
 // The glossary comes from the service so the table can speak Russian without
 // keeping a second copy of the feature names in the page.

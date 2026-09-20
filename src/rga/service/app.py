@@ -23,7 +23,7 @@ from rga.explain.reference import reference
 from rga.explain.structure import neighbourhood
 from rga.service.analysis import Analysis, analyse
 from rga.service.config import ServiceConfig
-from rga.service.triage import OPEN_OUTCOME, OUTCOMES, Decision, TriageStore
+from rga.service.triage import OPEN_OUTCOME, OUTCOMES, TITLES, Decision, MemoryStore
 
 WEB = Path("web")
 
@@ -66,7 +66,7 @@ def _grouped(rows: list[dict[str, object]], by: str) -> list[dict[str, object]]:
 
 
 def create_app(
-    config: ServiceConfig, *, scorer=None, store: TriageStore | None = None
+    config: ServiceConfig, *, scorer=None, store: MemoryStore | None = None
 ) -> FastAPI:
     """Build the application. `scorer` and `store` are injected by tests."""
     if scorer is None:
@@ -74,7 +74,7 @@ def create_app(
 
         scorer = load_scorer(config.model)
     if store is None:
-        store = TriageStore(config.store)
+        store = MemoryStore()
 
     app = FastAPI(title="Обзор изменений прав доступа", docs_url="/api/docs")
     state: dict[str, Analysis] = {"analysis": analyse(config, scorer)}
@@ -166,6 +166,8 @@ def create_app(
                 explain=False,
             ).as_dict()
             row["state"] = decision.outcome if resolved else "open"
+            row["state_title"] = TITLES[row["state"]]
+            row["note"] = decision.note if resolved else ""
             row["decided_at"] = decision.decided_at if decision is not None else None
             rows.append(row)
 

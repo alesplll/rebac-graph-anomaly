@@ -160,3 +160,20 @@ a.back:hover { color: #fff; }
 .picture-box { margin-top: 1.6rem; border-top: 1px solid var(--line); padding-top: .8rem; }
 .picture-box summary { cursor: pointer; font-size: .82rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 600; }
 .picture-box[open] summary { margin-bottom: .6rem; }
+
+/* ---- the state of a change -------------------------------------------- */
+
+.state-pick {
+  margin-left: auto;
+  font: inherit;
+  font-size: 11px;
+  padding: 1px 4px;
+  border: 1px solid #d0d6e0;
+  border-radius: 4px;
+  background: #fff;
+  color: #444c5a;
+  cursor: pointer;
+}
+.state-pick:hover { border-color: #9aa3b2; }
+.state-pick.dismissed { color: #5d6675; background: #eef1f6; }
+.state-pick.revoked { color: #b3261e; border-color: #b3261e; }
