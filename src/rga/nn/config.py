@@ -30,3 +30,9 @@ class ModelConfig:
     validation_share: float = 0.1
     #: Weight of the profile reconstruction term against the edge likelihood term.
     reconstruction_weight: float = 0.5
+    #: What the reconstruction head rebuilds: "profile", the node's own attributes,
+    #: or "neighbourhood", the mean attributes of the nodes it touches. The profile
+    #: variant makes the deviation track node degree; see docs/module-3-findings.md.
+    reconstruction_target: str = "profile"
+    #: Weight of the correspondence term. Zero leaves that head out of the model.
+    correspondence_weight: float = 0.0

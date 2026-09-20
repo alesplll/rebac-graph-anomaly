@@ -23,7 +23,7 @@ from rga.nn.encoder import GraphEncoder
 from rga.nn.graph_tensors import graph_tensors
 from rga.nn.heads import EdgeLikelihoodHead, NodeReconstructionHead
 from rga.nn.negatives import sample_negatives
-from rga.nn.node_inputs import NODE_INPUT_DIM, node_input_features
+from rga.nn.node_inputs import NODE_INPUT_DIM, node_input_features, reconstruction_target
 from rga.nn.runtime import seed_torch
 
 
@@ -63,6 +63,8 @@ def train_model(
 
     tensors = graph_tensors(graph, device=device, keep=keep)
     inputs = node_input_features(tensors)
+    # The graph does not move between epochs, so neither does what is reconstructed.
+    targets = reconstruction_target(tensors, inputs, config)
 
     model = GnnModel(edge_dim=arrays.features.shape[1], config=config).to(device)
     optimiser = torch.optim.AdamW(
@@ -114,7 +116,9 @@ def train_model(
         loss = F.binary_cross_entropy_with_logits(
             positive, torch.ones_like(positive)
         ) + F.binary_cross_entropy_with_logits(negative, torch.zeros_like(negative))
-        loss = loss + config.reconstruction_weight * F.mse_loss(model.reconstruction(h), inputs)
+        loss = loss + config.reconstruction_weight * F.mse_loss(
+            model.reconstruction(h), targets
+        )
 
         optimiser.zero_grad(set_to_none=True)
         loss.backward()

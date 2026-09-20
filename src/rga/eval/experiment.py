@@ -72,6 +72,13 @@ def build_scorer(name: str, seed: int) -> Scorer:
         from rga.nn.scorer import GnnScorer
 
         return GnnScorer(seed=seed)
+    if name == "gnn_neighbourhood":
+        from rga.nn.config import ModelConfig
+        from rga.nn.scorer import GnnScorer
+
+        return GnnScorer(
+            seed=seed, config=replace(ModelConfig(), reconstruction_target="neighbourhood")
+        )
     if name == "gnn_supervised":
         from rga.nn.supervised import SupervisedGnnScorer
 

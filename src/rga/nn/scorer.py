@@ -21,7 +21,7 @@ from rga.features.spec import CandidateSet
 from rga.nn.candidates import CandidateArrays, candidate_arrays, without_features
 from rga.nn.config import ModelConfig
 from rga.nn.graph_tensors import graph_tensors
-from rga.nn.node_inputs import node_input_features
+from rga.nn.node_inputs import node_input_features, reconstruction_target
 from rga.nn.runtime import select_device
 from rga.nn.scoring import NEUTRAL, RankTransform, combine
 from rga.nn.train import GnnModel, train_model
@@ -148,7 +148,8 @@ class GnnScorer:
         inputs = node_input_features(tensors)
         with torch.no_grad():
             state = self._model.encoder(inputs, tensors)
-            deviation = self._model.reconstruction.deviation(state, inputs).cpu().numpy()
+            targets = reconstruction_target(tensors, inputs, self._config)
+            deviation = self._model.reconstruction.deviation(state, targets).cpu().numpy()
         return state, deviation
 
     def _likelihood(self, state: torch.Tensor, arrays: CandidateArrays) -> np.ndarray:

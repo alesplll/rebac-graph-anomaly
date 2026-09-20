@@ -17,6 +17,7 @@ import torch
 
 from rga.domain.entities import EntityType
 from rga.domain.relations import PermissionLevel, RelationType
+from rga.nn.config import ModelConfig
 from rga.nn.graph_tensors import NUM_SLOTS, SLOTS, GraphTensors
 
 _NUM_TYPES = len(EntityType)
@@ -58,3 +59,35 @@ def node_input_features(tensors: GraphTensors) -> torch.Tensor:
             held_over[tensors.dst[slot][at_value]] = float(value)
 
     return torch.cat([kind, degrees, held.unsqueeze(1), held_over.unsqueeze(1)], dim=1)
+
+
+def neighbourhood_targets(tensors: GraphTensors, inputs: torch.Tensor) -> torch.Tensor:
+    """The mean attribute vector of every node's undirected neighbourhood.
+
+    Reconstructing a node's own profile turned out to measure how central it is
+    rather than how strange: the hardest rows to rebuild are the busy ones, and busy
+    nodes produce most of the ordinary changes. Averaging the surroundings removes
+    the node's own degree from its target.
+
+    A node with no neighbours keeps its own vector: there is nothing to average, and
+    a row of zeros would make every isolate look equally odd.
+    """
+    total = torch.zeros_like(inputs)
+    seen = torch.zeros(tensors.num_nodes, device=tensors.device)
+    for slot in range(NUM_SLOTS):
+        source, target = tensors.src[slot], tensors.dst[slot]
+        total.index_add_(0, target, inputs[source])
+        seen.index_add_(0, target, torch.ones_like(target, dtype=torch.float32))
+    averaged = total / seen.clamp(min=1.0).unsqueeze(1)
+    return torch.where((seen == 0).unsqueeze(1), inputs, averaged)
+
+
+def reconstruction_target(
+    tensors: GraphTensors, inputs: torch.Tensor, config: ModelConfig
+) -> torch.Tensor:
+    """What the reconstruction head is asked to rebuild."""
+    if config.reconstruction_target == "profile":
+        return inputs
+    if config.reconstruction_target == "neighbourhood":
+        return neighbourhood_targets(tensors, inputs)
+    raise ValueError(f"unknown reconstruction target: {config.reconstruction_target!r}")
