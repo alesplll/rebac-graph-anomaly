@@ -1,0 +1,12 @@
+# The same scorer at full size. This is the configuration module 5 measured at
+# PR-AUC 0.981 +- 0.029 with precision 0.990 over the first twenty positions:
+# 8 departments, 312 users, 30 517 training candidates against 4 136 in the small
+# one. Same hyperparameters — what differs is how much the model was trained on.
+dataset: configs/generator/default-history.yaml
+scorer: gnn_supervised
+seed: 1
+model:
+  hidden_dim: 64
+  num_layers: 3
+  epochs: 200
+  patience: 20

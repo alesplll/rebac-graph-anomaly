@@ -1,7 +1,10 @@
-# The artefact the service ships with. The supervised variant is used because it
-# scored best in module 3 (PR-AUC 0.739 against 0.719 for the best classical
-# baseline), and because its head reads the candidate features, which is what makes
-# feature attribution possible at all.
+# The artefact the small demonstration ships with. The supervised variant is used
+# because it scores best (PR-AUC 0.888 against 0.719 for the best classical baseline
+# on this dataset), and because its head reads the candidate features, which is what
+# makes feature attribution possible at all.
+#
+# The hyperparameters below are the design document's, section 7. They were never
+# swept: no configuration in this work was chosen by searching over them.
 dataset: configs/generator/small-history.yaml
 scorer: gnn_supervised
 seed: 1

@@ -1,0 +1,9 @@
+# The demonstration at a realistic size: the organization of default-history,
+# whose evaluation window carries 2 759 changes against 637 in the small one. This
+# is the dataset the strongest measured numbers belong to — docs/thesis/gnn-full.md.
+source:
+  kind: synthetic
+  dataset: configs/generator/default-history.yaml
+model: artifacts/gnn-supervised-full
+window_days: 14
+queue: 50

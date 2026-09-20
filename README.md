@@ -81,6 +81,7 @@ and the relation mapping. Edit that file for a different deployment.
 
 ```bash
 uv run rga generate --config configs/generator/small.yaml --out data/small
+uv run rga train --config configs/train/gnn-supervised.yaml --out artifacts/gnn-supervised
 uv run rga evaluate --config configs/experiments/gnn.yaml --out experiments/runs/gnn
 uv run python scripts/profile_epoch.py
 uv run pytest -m "not integration and not gpu"
