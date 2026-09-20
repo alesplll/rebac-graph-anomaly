@@ -1,18 +1,38 @@
 "use strict";
 
-// The page holds no state beyond what is on screen: the service is the source of
-// truth, and a refresh there is a refresh here. The neighbourhood picture arrives
-// already drawn, so nothing here can fail silently and leave an empty box.
+// A triage console. The service owns the analysis; the page owns what the analyst
+// is looking at and what they have selected. Decisions are not kept here at all —
+// they go straight to the journal, because a decision that lives only in a browser
+// tab is not a record of anything.
 
 const queue = document.getElementById("queue");
 const card = document.getElementById("card");
 const statusLine = document.getElementById("status");
 const counter = document.getElementById("counter");
+const history = document.getElementById("history");
+const selection = document.getElementById("selection");
+const noteField = document.getElementById("note");
 
 const KIND = ["user", "group", "bucket", "object"];
+const WEEKDAYS = ["воскресенье", "понедельник", "вторник", "среда", "четверг", "пятница", "суббота"];
+const OUTCOMES = {
+  confirmed: "подтверждено",
+  false_positive: "ложное срабатывание",
+  accepted_risk: "принятый риск",
+  reopened: "возвращено в работу",
+};
+
 let GLOSSARY = {};
 let GROUPS = {};
-const WEEKDAYS = ["воскресенье", "понедельник", "вторник", "среда", "четверг", "пятница", "суббота"];
+
+const state = {
+  tab: "queue",
+  rows: [],
+  groups: [],
+  selected: new Set(),
+  anchor: null,
+  opened: null,
+};
 
 function kind(id) {
   const prefix = String(id).split(":", 1)[0];
@@ -35,6 +55,7 @@ function node(id) {
   return `<span class="node ${kind(id)}" title="${escapeHtml(id)}">${escapeHtml(shorten(id))}</span>`;
 }
 
+// Identifiers come from somebody else's authorization engine and land in markup.
 function escapeHtml(value) {
   return String(value).replace(/[&<>"]/g, (character) =>
     ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[character]
@@ -71,43 +92,210 @@ async function get(path, params) {
 async function loadStatus() {
   const body = await get("/api/status");
   const source = body.source === "synthetic" ? "синтетика" : "живой opens3-rebac";
-  const window_ = when(body.window.end);
+  const edge = when(body.window.end);
   statusLine.textContent =
-    `${source} · уровень возможностей ${body.capability_level} · модель ${body.scorer} · ` +
-    `окно до ${window_.date} · ${body.candidates} изменений · обновлено ${body.refreshed_at}`;
+    `${source} · уровень ${body.capability_level} · ${body.scorer} · ` +
+    `окно до ${edge.date} · ${body.candidates} изменений`;
 }
 
+/* ---- the queue --------------------------------------------------------- */
+
 function filters() {
+  const view = document.getElementById("state").value;
+  const outcome = document.getElementById("outcome");
+  outcome.disabled = view === "open";
   return {
-    subject: document.getElementById("filter-subject").value.trim(),
-    relation: document.getElementById("filter-relation").value,
-    limit: 50,
+    q: document.getElementById("search").value.trim(),
+    state: view,
+    outcome: view === "open" ? "" : outcome.value,
+    group: document.getElementById("group").value,
+    limit: 100,
   };
 }
 
 async function loadQueue() {
   const body = await get("/api/incidents", filters());
-  counter.textContent = `показано ${body.incidents.length} из ${body.total}`;
-  queue.replaceChildren();
+  state.rows = body.incidents;
+  state.groups = body.groups;
+  // A decided change may have scrolled out of view; keeping it selected would let
+  // the next bulk decision touch something the analyst can no longer see.
+  const visible = new Set(state.rows.map((row) => row.id));
+  state.selected = new Set([...state.selected].filter((id) => visible.has(id)));
 
-  const highest = body.incidents.length ? body.incidents[0].score : 1;
-  body.incidents.forEach((item) => {
-    const row = document.createElement("li");
-    row.dataset.id = item.id;
-    const moment = when(item.ts);
-    const level = item.level && item.level !== "none"
-      ? ` <span class="tag level">${escapeHtml(item.level)}</span>` : "";
-    row.innerHTML =
-      `<div class="row-top">
-         <span class="rank">#${item.rank}</span>
-         <span class="score" style="color:${heat(item.score)}">${item.score.toFixed(3)}</span>
-         <span class="row-when">${moment.date} ${moment.time}</span>
-       </div>
-       <div class="chain">${node(item.subject)} <span class="arrow">—${escapeHtml(item.relation)}→</span> ${node(item.object)}${level}</div>
-       <div class="bar"><span style="width:${Math.max(4, (item.score / highest) * 100)}%;background:${heat(item.score)}"></span></div>`;
-    row.addEventListener("click", () => openCard(item.id));
-    queue.append(row);
+  counter.textContent =
+    `показано ${body.incidents.length} · открытых ${body.open} · разобрано ${body.resolved}`;
+  renderQueue();
+  renderSelection();
+}
+
+function rowMarkup(item) {
+  const moment = when(item.ts);
+  const level = item.level && item.level !== "none"
+    ? ` <span class="tag level">${escapeHtml(item.level)}</span>` : "";
+  const badge = item.state && item.state !== "open"
+    ? ` <span class="badge ${escapeHtml(item.state)}">${escapeHtml(OUTCOMES[item.state] || item.state)}</span>`
+    : "";
+  return `<input type="checkbox" data-pick="${escapeHtml(item.id)}"${
+      state.selected.has(item.id) ? " checked" : ""}>
+    <span class="rank">${item.rank}</span>
+    <span class="score" style="color:${heat(item.score)}">${item.score.toFixed(3)}</span>
+    <span class="at">${moment.date} ${moment.time}</span>
+    <span class="what">${node(item.subject)} <span class="rel">${escapeHtml(item.relation)}</span> ${
+      node(item.object)}${level}${badge}</span>`;
+}
+
+function rowElement(item) {
+  const row = document.createElement("div");
+  row.className = "row";
+  row.dataset.id = item.id;
+  if (state.selected.has(item.id)) row.classList.add("picked");
+  if (state.opened === item.id) row.classList.add("open-card");
+  row.innerHTML = rowMarkup(item);
+  row.addEventListener("click", (event) => {
+    if (event.target.dataset.pick) return;
+    openCard(item.id);
   });
+  return row;
+}
+
+function renderQueue() {
+  queue.replaceChildren();
+  if (!state.rows.length) {
+    queue.innerHTML = `<p class="hint">Ничего не найдено. Снимите фильтры или
+      посмотрите разобранные.</p>`;
+    return;
+  }
+  if (!state.groups.length) {
+    state.rows.forEach((item) => queue.append(rowElement(item)));
+    return;
+  }
+
+  const byId = new Map(state.rows.map((item) => [item.id, item]));
+  state.groups.forEach((group) => {
+    const head = document.createElement("div");
+    head.className = "group-head";
+    head.innerHTML =
+      `${node(group.key)} <span class="count">${group.count} изм. · максимум ${
+        group.top_score.toFixed(3)}</span>
+       <button type="button" data-group="${escapeHtml(group.key)}">Выбрать группу</button>`;
+    head.querySelector("button").addEventListener("click", (event) => {
+      event.stopPropagation();
+      group.incidents.forEach((id) => state.selected.add(id));
+      renderQueue();
+      renderSelection();
+    });
+    queue.append(head);
+    group.incidents.forEach((id) => {
+      const item = byId.get(id);
+      if (item) queue.append(rowElement(item));
+    });
+  });
+}
+
+/* ---- selection --------------------------------------------------------- */
+
+function order() {
+  return state.groups.length
+    ? state.groups.flatMap((group) => group.incidents)
+    : state.rows.map((item) => item.id);
+}
+
+function pick(id, extend) {
+  const ids = order();
+  if (extend && state.anchor !== null && ids.includes(state.anchor)) {
+    const from = ids.indexOf(state.anchor);
+    const to = ids.indexOf(id);
+    ids.slice(Math.min(from, to), Math.max(from, to) + 1).forEach((each) => state.selected.add(each));
+  } else if (state.selected.has(id)) {
+    state.selected.delete(id);
+  } else {
+    state.selected.add(id);
+  }
+  state.anchor = id;
+  renderQueue();
+  renderSelection();
+}
+
+function renderSelection() {
+  const count = state.selected.size;
+  selection.hidden = count === 0;
+  document.getElementById("selected").textContent = `выбрано ${count}`;
+  // Reopening only makes sense for changes that were decided on.
+  document.getElementById("reopen").hidden = document.getElementById("state").value === "open";
+}
+
+async function decide(outcome) {
+  if (!state.selected.size) return;
+  const answer = await fetch("/api/decisions", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      incidents: [...state.selected],
+      outcome,
+      note: noteField.value.trim(),
+    }),
+  });
+  if (!answer.ok) {
+    statusLine.textContent = "Решение не записано, попробуйте ещё раз";
+    return;
+  }
+  state.selected.clear();
+  state.anchor = null;
+  noteField.value = "";
+  await loadQueue();
+  if (state.opened) await openCard(state.opened);
+}
+
+/* ---- history ----------------------------------------------------------- */
+
+function decisionRow(entry) {
+  const moment = when(Date.parse(entry.decided_at));
+  const what = entry.subject
+    ? `${node(entry.subject)} <span class="rel">${escapeHtml(entry.relation)}</span> ${node(entry.object)}`
+    : `<span class="mono">${escapeHtml(entry.incident)}</span>`;
+  return `<tr>
+    <td>${moment.date} ${moment.time}</td>
+    <td><span class="badge ${escapeHtml(entry.outcome)}">${
+      escapeHtml(OUTCOMES[entry.outcome] || entry.outcome)}</span></td>
+    <td>${what}</td>
+    <td class="number">${entry.score ? entry.score.toFixed(3) : "—"}</td>
+    <td>${escapeHtml(entry.note)}</td></tr>`;
+}
+
+async function renderHistory() {
+  const body = await get("/api/decisions", { limit: 200 });
+  if (!body.decisions.length) {
+    history.innerHTML = `<p class="hint">Решений пока нет. Разберите что-нибудь в очереди.</p>`;
+    return;
+  }
+  history.innerHTML =
+    `<h2>Журнал решений</h2>
+     <table><thead><tr><th>когда</th><th>решение</th><th>изменение</th>
+       <th>оценка</th><th>заметка</th></tr></thead>
+       <tbody>${body.decisions.map(decisionRow).join("")}</tbody></table>
+     <p class="caption">Журнал только дополняется: смена решения добавляет запись, а не
+       заменяет прежнюю.</p>`;
+}
+
+function decisionBlock(body) {
+  const current = body.decision;
+  const rows = (body.history || []).map((entry) => {
+    const moment = when(Date.parse(entry.decided_at));
+    return `<li>${moment.date} ${moment.time} — ${
+      escapeHtml(OUTCOMES[entry.outcome] || entry.outcome)}${
+      entry.note ? `: ${escapeHtml(entry.note)}` : ""}</li>`;
+  }).join("");
+
+  if (!current) {
+    return `<div class="decision"><span class="who">Решение не принято.
+      Выберите изменение в списке и воспользуйтесь панелью внизу.</span></div>`;
+  }
+  return `<div class="decision">
+    <b>${escapeHtml(OUTCOMES[current.outcome] || current.outcome)}</b>
+    ${current.note ? ` — ${escapeHtml(current.note)}` : ""}
+    <div class="who">записал ${escapeHtml(current.analyst)} · ${escapeHtml(current.decided_at)}</div>
+    ${rows ? `<ul class="observations">${rows}</ul>` : ""}
+  </div>`;
 }
 
 function fact(label, value, unknown) {
@@ -186,7 +374,9 @@ const LEGEND = `<div class="legend">
 </div>`;
 
 async function openCard(id) {
-  queue.querySelectorAll("li").forEach((row) => row.classList.toggle("chosen", row.dataset.id === id));
+  state.opened = id;
+  queue.querySelectorAll(".row").forEach((row) =>
+    row.classList.toggle("open-card", row.dataset.id === id));
   card.innerHTML = `<p class="hint">Считаем обоснование…</p>`;
 
   const body = await get(`/api/incidents/${id}`);
@@ -195,6 +385,7 @@ async function openCard(id) {
        <span class="verdict" style="color:${heat(body.score)}">${body.score.toFixed(3)}</span>
        <span class="place">место ${body.rank} в очереди на разбор</span>
      </div>
+     ${decisionBlock(body)}
      ${factsBlock(body)}
      <h2>Что здесь необычного</h2>
      <ul class="observations">${body.summary
@@ -214,13 +405,62 @@ async function openCard(id) {
      </details>`;
 }
 
+/* ---- wiring ------------------------------------------------------------ */
+
+function theme(next) {
+  document.documentElement.dataset.theme = next;
+  try { localStorage.setItem("theme", next); } catch (error) { /* private window */ }
+}
+
+function showTab(name) {
+  state.tab = name;
+  document.getElementById("workspace").hidden = name !== "queue";
+  history.hidden = name !== "history";
+  document.querySelectorAll(".tabs button").forEach((button) => {
+    button.classList.toggle("active", button.dataset.tab === name);
+  });
+  if (name === "history") renderHistory().catch(() => {});
+}
+
+queue.addEventListener("click", (event) => {
+  const id = event.target.dataset && event.target.dataset.pick;
+  if (id) pick(id, event.shiftKey);
+});
+
+["search", "state", "outcome", "group"].forEach((id) => {
+  const control = document.getElementById(id);
+  control.addEventListener(id === "search" ? "input" : "change", () => {
+    loadQueue().catch((error) => { statusLine.textContent = error.message; });
+  });
+});
+
+document.querySelectorAll("[data-outcome]").forEach((button) => {
+  button.addEventListener("click", () => decide(button.dataset.outcome));
+});
+
+document.getElementById("clear").addEventListener("click", () => {
+  state.selected.clear();
+  state.anchor = null;
+  renderQueue();
+  renderSelection();
+});
+
+document.querySelectorAll(".tabs button").forEach((button) => {
+  button.addEventListener("click", () => showTab(button.dataset.tab));
+});
+
+document.getElementById("theme").addEventListener("click", () => {
+  theme(document.documentElement.dataset.theme === "dark" ? "light" : "dark");
+});
+
 document.getElementById("refresh").addEventListener("click", async () => {
   statusLine.textContent = "Перечитываем источник…";
   await fetch("/api/refresh", { method: "POST" });
   await loadStatus();
   await loadQueue();
 });
-document.getElementById("apply").addEventListener("click", loadQueue);
+
+try { theme(localStorage.getItem("theme") || "light"); } catch (error) { theme("light"); }
 
 // The glossary comes from the service so the table can speak Russian without
 // keeping a second copy of the feature names in the page.

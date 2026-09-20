@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="ru">
+<html lang="ru" data-theme="light">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -7,39 +7,59 @@
   <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
-  <header>
-    <div>
-      <h1>Обзор изменений прав доступа</h1>
-      <p id="status">Загрузка…</p>
-    </div>
-    <div class="actions">
-      <a class="back" href="/reference">Справочник</a>
-      <button id="refresh" type="button">Обновить</button>
-    </div>
+  <header id="top">
+    <span class="brand">Изменения прав доступа</span>
+    <span id="status" class="status">Загрузка…</span>
+    <nav class="tabs">
+      <button type="button" data-tab="queue" class="active">Очередь</button>
+      <button type="button" data-tab="history">История</button>
+    </nav>
+    <a class="link" href="/reference">Справочник</a>
+    <button id="refresh" type="button" title="Перечитать источник">Обновить</button>
+    <button id="theme" type="button" title="Светлая или тёмная тема">◐</button>
   </header>
 
   <section id="filters">
-    <label>Субъект <input id="filter-subject" type="text" placeholder="user:…"></label>
-    <label>Отношение
-      <select id="filter-relation">
-        <option value="">любое</option>
-        <option>HAS_PERMISSION</option>
-        <option>MEMBER_OF</option>
-        <option>PARENT_OF</option>
-        <option>OWNER_OF</option>
-      </select>
-    </label>
-    <button id="apply" type="button">Применить</button>
-    <span id="counter"></span>
+    <input id="search" type="search" placeholder="Субъект, объект или инициатор">
+    <select id="state" title="Какие изменения показывать">
+      <option value="open">Открытые</option>
+      <option value="resolved">Разобранные</option>
+      <option value="all">Все</option>
+    </select>
+    <select id="outcome" title="Решение аналитика" disabled>
+      <option value="">Любое решение</option>
+      <option value="confirmed">Подтверждено</option>
+      <option value="false_positive">Ложное срабатывание</option>
+      <option value="accepted_risk">Принятый риск</option>
+    </select>
+    <select id="group" title="Сгруппировать очередь">
+      <option value="none">Без группировки</option>
+      <option value="subject">По субъекту</option>
+      <option value="object">По объекту</option>
+    </select>
+    <span id="counter" class="counter"></span>
   </section>
 
-  <main>
-    <ol id="queue"></ol>
-    <article id="card">
+  <main id="workspace">
+    <section id="queue" class="panel"></section>
+    <article id="card" class="panel">
       <p class="hint">Выберите изменение из списка слева — система покажет, что в нём
-        необычного и на какие связи она при этом опиралась.</p>
+        необычного и на какие связи она при этом опиралась. Решение принимает
+        специалист; система лишь раскладывает основания.</p>
     </article>
   </main>
+
+  <section id="history" class="panel" hidden></section>
+
+  <div id="selection" hidden>
+    <span id="selected"></span>
+    <input id="note" type="text" placeholder="Заметка к решению">
+    <button type="button" data-outcome="confirmed">Подтверждено</button>
+    <button type="button" data-outcome="false_positive">Ложное срабатывание</button>
+    <button type="button" data-outcome="accepted_risk">Принятый риск</button>
+    <button type="button" data-outcome="reopened" id="reopen" hidden>Вернуть в работу</button>
+    <button type="button" id="clear">Снять выбор</button>
+  </div>
 
   <script src="/static/app.js"></script>
 </body>
