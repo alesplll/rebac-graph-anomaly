@@ -77,6 +77,15 @@ through the engine, press Refresh, and the change appears in the queue.
 Connection details live in `configs/service/opens3.yaml`: `uri`, `user`, `password`,
 and the relation mapping. Edit that file for a different deployment.
 
+## Triage
+
+The queue is worked, not just read. An analyst filters and groups it, selects several
+changes at once and records a decision — confirmed, false positive or accepted risk —
+with a note. Decisions go to an append-only SQLite journal named by the service
+configuration, so they survive a restart and a reopening adds a row rather than
+overwriting one. The journal is never read by the model: `tests/test_layering.py`
+checks that mechanically.
+
 ## Other commands
 
 ```bash
