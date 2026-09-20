@@ -13,6 +13,7 @@
 | `gnn.md` | Сеть против бейзлайнов, пять сидов, один и тот же датасет | `uv run rga evaluate --config configs/experiments/gnn.yaml --out experiments/runs/gnn` |
 | `gradcheck.md` | Сверка аналитических градиентов с конечными разностями | `uv run python scripts/gradient_check.py` |
 | `reference.md` | Справочник аналитика: наблюдения, таблицы карточки, все 70 признаков | `uv run python scripts/reference_doc.py` |
+| `gnn-full.md` | То же сравнение на полном наборе: 8 отделов, 312 пользователей | `uv run rga evaluate --config configs/experiments/gnn-full.yaml --out experiments/runs/gnn-full` |
 | `module5.md` | Три самообучаемых варианта против лучшего классического метода | `uv run rga evaluate --config configs/experiments/module5.yaml --out experiments/runs/module5` |
 | `score-terms.md` | Каждое слагаемое оценки по отдельности, по трём вариантам | `uv run python scripts/term_study.py` |
 | `generalisation.md` | Скрытые паттерны, непохожие по форме на обучающие | `uv run rga evaluate --config configs/experiments/generalisation.yaml --out experiments/runs/generalisation` |
@@ -37,6 +38,14 @@
 уровнем 2 составляет от 0.06 до 0.27 по площади под кривой точность-полнота. Это
 цена, которую платит интегратор, чей движок авторизации не хранит времени и
 происхождения изменений — измеренная, а не предполагаемая.
+
+## Почему таблицы `gnn.md` и `gnn-full.md` нельзя сравнивать по абсолютной величине
+
+Случайное упорядочивание даёт PR-AUC, равный доле аномалий, а доля в окне оценки
+разная: 3.61% у малого набора и 1.49% у полного. Полный набор труднее по базовой
+ставке, поэтому абсолютные числа там ниже почти у всех. Сравнивать корректно либо
+скореры между собой внутри одной таблицы, либо отношение к случайному уровню —
+разбор в `docs/module-5-findings.md`, раздел 8.
 
 ## Почему основная метрика — PR-AUC, а не ROC-AUC
 

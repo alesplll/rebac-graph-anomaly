@@ -50,7 +50,11 @@ uv run rga evaluate --config configs/experiments/gnn.yaml --out experiments/runs
 разброса между сидами. Большое расхождение означает, что что-то зависит от
 платформы, чего быть не должно.
 
-## 4. Полный прогон, около двадцати минут
+## 4. Полный прогон — **больше не нужен здесь**
+
+Сделан на ноутбуке 20.09.2026 за 6 минут 25 секунд, результат уже опубликован в
+`docs/thesis/gnn-full.md`. Держать ради него отдельную машину незачем. Запускать
+на ПК имеет смысл только как сверку платформ, наравне с пунктом 3.
 
 ```powershell
 uv run rga evaluate --config configs/experiments/gnn-full.yaml --out experiments/runs/gnn-full
@@ -81,9 +85,10 @@ uv run rga evaluate --config configs/experiments/gnn-full.yaml --out experiments
 1. Вывод `scripts/gpu_smoke.py` целиком.
 2. Итог `pytest`: строку с числом пройденных и упавших.
 3. Содержимое `experiments/runs/gnn-pc/results.md` — для сверки платформ.
-4. Содержимое `experiments/runs/gnn-full/results.md` — это таблица, которая пойдёт
-   в работу как `docs/thesis/gnn-full.md`.
-5. Сколько по времени заняли пункты 3 и 4.
+4. Содержимое `experiments/runs/gnn-full/results.md`, если пункт 4 запускался —
+   для сверки с уже опубликованной таблицей, снятой на ноутбуке.
+5. Сколько по времени заняли пункты 3 и 4. На ноутбуке пункт 4 занял 6 минут 25
+   секунд без ускорителя.
 6. Вывод `uv run python scripts/profile_epoch.py` — стоимость эпохи на видеокарте
    против ноутбучной.
 
