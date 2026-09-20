@@ -65,3 +65,35 @@ def test_the_page_reports_its_own_failures() -> None:
 
     assert 'addEventListener("error"' in script
     assert 'addEventListener("unhandledrejection"' in script
+
+
+def test_the_choice_filters_need_no_button() -> None:
+    """Picking from a list is the whole instruction; asking for a second one is noise.
+
+    The state control already applied itself on choice, and the relation one did not,
+    which read as one of them being broken.
+    """
+    markup = (WEB / "index.html").read_text(encoding="utf-8")
+    script = (WEB / "app.js").read_text(encoding="utf-8")
+
+    assert 'id="apply"' not in markup
+    for control in ("filter-relation", "filter-state"):
+        assert f'getElementById("{control}").addEventListener("change"' in script, control
+
+
+def test_the_typed_search_keeps_a_button_of_its_own() -> None:
+    """Typing has no end the page can see, so the search says when it is done."""
+    markup = (WEB / "index.html").read_text(encoding="utf-8")
+    script = (WEB / "app.js").read_text(encoding="utf-8")
+
+    assert 'id="find"' in markup
+    # The button belongs to the field: they sit in one group, in that order.
+    group = markup.split('id="filter-subject"', 1)[1].split("</label>", 1)[0]
+    assert 'id="find"' in group
+    assert 'getElementById("find")' in script
+
+
+def test_enter_searches_too() -> None:
+    script = (WEB / "app.js").read_text(encoding="utf-8")
+
+    assert "Enter" in script

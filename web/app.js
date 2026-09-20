@@ -1,5 +1,17 @@
 "use strict";
 
+// A page that fails silently is worse than one that fails loudly: twice now a
+// broken script left an empty screen with nothing anywhere to say why. Whatever
+// goes wrong from here on says so where the analyst is already looking.
+window.addEventListener("error", (event) => {
+  const line = document.getElementById("status");
+  if (line) line.textContent = `Ошибка на странице: ${event.message}`;
+});
+window.addEventListener("unhandledrejection", (event) => {
+  const line = document.getElementById("status");
+  if (line) line.textContent = `Запрос не удался: ${event.reason && event.reason.message}`;
+});
+
 // The page holds no state beyond what is on screen: the service is the source of
 // truth, and a refresh there is a refresh here. The neighbourhood picture arrives
 // already drawn, so nothing here can fail silently and leave an empty box.
@@ -269,8 +281,15 @@ document.getElementById("refresh").addEventListener("click", async () => {
   await loadStatus();
   await loadQueue();
 });
-document.getElementById("apply").addEventListener("click", loadQueue);
+// Choosing from a list is a finished instruction, so it applies itself. Typing is
+// not: the page cannot tell a pause from an ending, so the search says when it is
+// done — by its own button or by Enter.
+document.getElementById("filter-relation").addEventListener("change", loadQueue);
 document.getElementById("filter-state").addEventListener("change", loadQueue);
+document.getElementById("find").addEventListener("click", loadQueue);
+document.getElementById("filter-subject").addEventListener("keydown", (event) => {
+  if (event.key === "Enter") loadQueue();
+});
 
 queue.addEventListener("change", (event) => {
   const id = event.target.dataset && event.target.dataset.state;
