@@ -1,8 +1,9 @@
-"""The HTTP surface: a queue, a card, a neighbourhood.
+"""The HTTP surface: a queue, a card, a neighbourhood, and the analyst's decisions.
 
-The service reads and never writes. It holds one analysis in memory and replaces it on
-refresh, which is what the closing minute of the demonstration leans on: grant yourself
-a right through the engine, press refresh, watch it arrive.
+The analysis is read-only and replaced wholesale on refresh, which is what the closing
+minute of the demonstration leans on: grant yourself a right through the engine, press
+refresh, watch it arrive. The one thing the service does write is the triage journal,
+and that lives in its own module which knows nothing about scoring.
 """
 
 from __future__ import annotations
@@ -15,21 +16,26 @@ from fastapi.staticfiles import StaticFiles
 
 from rga.domain.entities import entity_type
 from rga.domain.relations import PermissionLevel, RelationType
-from rga.explain.incident import build_incident
+from rga.explain.incident import build_incident, incident_id
 from rga.explain.reference import reference
 from rga.explain.structure import neighbourhood
 from rga.service.analysis import Analysis, analyse
 from rga.service.config import ServiceConfig
+from rga.service.triage import OPEN_OUTCOME, TriageStore
 
 WEB = Path("web")
 
 
-def create_app(config: ServiceConfig, *, scorer=None) -> FastAPI:
-    """Build the application. `scorer` is injected by tests; otherwise it is loaded."""
+def create_app(
+    config: ServiceConfig, *, scorer=None, store: TriageStore | None = None
+) -> FastAPI:
+    """Build the application. `scorer` and `store` are injected by tests."""
     if scorer is None:
         from rga.artifacts import load_scorer
 
         scorer = load_scorer(config.model)
+    if store is None:
+        store = TriageStore(config.store)
 
     app = FastAPI(title="Обзор изменений прав доступа", docs_url="/api/docs")
     state: dict[str, Analysis] = {"analysis": analyse(config, scorer)}
@@ -62,34 +68,64 @@ def create_app(config: ServiceConfig, *, scorer=None) -> FastAPI:
     @app.get("/api/incidents")
     def incidents(
         limit: int = Query(default=config.queue, ge=1, le=500),
+        state: str = Query(default="open", pattern="^(open|resolved|all)$"),
         since: int | None = None,
         relation: str | None = None,
         subject: str | None = None,
     ) -> dict[str, object]:
         analysis = current()
-        rows = []
+        # Read once per request rather than once per row: the journal is small, but
+        # the queue is not, and a query per candidate would show in the page.
+        decided = store.current()
+
+        rows: list[dict[str, object]] = []
+        open_count = 0
+        resolved_count = 0
+
         for rank, position in enumerate(analysis.order.tolist(), start=1):
             key = analysis.candidates.keys[position]
             ts = int(analysis.candidates.ts[position])
+            decision = decided.get(incident_id(key, ts))
+            resolved = decision is not None and decision.outcome != OPEN_OUTCOME
+
+            # Counted over the whole queue, so the tally above the page does not
+            # shrink with the page.
+            if resolved:
+                resolved_count += 1
+            else:
+                open_count += 1
+
+            if state == "open" and resolved:
+                continue
+            if state == "resolved" and not resolved:
+                continue
             if since is not None and ts < since:
                 continue
             if subject is not None and key[0] != subject:
                 continue
             if relation is not None and RelationType(key[1]).name != relation:
                 continue
-            rows.append(
-                build_incident(
-                    scorer,
-                    analysis.candidates,
-                    position,
-                    score=float(analysis.scores[position]),
-                    rank=rank,
-                    explain=False,
-                ).as_dict()
-            )
             if len(rows) >= limit:
-                break
-        return {"incidents": rows, "total": analysis.candidates.n_candidates}
+                continue
+
+            row = build_incident(
+                scorer,
+                analysis.candidates,
+                position,
+                score=float(analysis.scores[position]),
+                rank=rank,
+                explain=False,
+            ).as_dict()
+            row["state"] = decision.outcome if resolved else "open"
+            row["decided_at"] = decision.decided_at if decision is not None else None
+            rows.append(row)
+
+        return {
+            "incidents": rows,
+            "total": analysis.candidates.n_candidates,
+            "open": open_count,
+            "resolved": resolved_count,
+        }
 
     @app.get("/api/incidents/{incident}")
     def incident(incident: str) -> dict[str, object]:

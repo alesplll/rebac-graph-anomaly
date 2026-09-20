@@ -12,17 +12,48 @@ from rga.nn.config import ModelConfig
 from rga.nn.supervised import SupervisedGnnScorer
 from rga.service.app import create_app
 from rga.service.config import load_service_config
+from rga.service.triage import Decision, TriageStore
 
 FAST = ModelConfig(hidden_dim=16, num_layers=2, epochs=3, patience=3)
 
 
 @pytest.fixture(scope="module")
-def client():
+def fitted():
+    """The expensive half, paid for once."""
     dataset = build_dataset(load_dataset_config(Path("configs/generator/small-history.yaml")))
     scorer = SupervisedGnnScorer(seed=0, config=FAST)
     scorer.fit(build_candidates(dataset, Span.TRAIN))
-    config = load_service_config(Path("configs/service/synthetic.yaml"))
-    return TestClient(create_app(config, scorer=scorer))
+    return scorer, load_service_config(Path("configs/service/synthetic.yaml"))
+
+
+@pytest.fixture(scope="module")
+def client(fitted, tmp_path_factory):
+    scorer, config = fitted
+    store = TriageStore(tmp_path_factory.mktemp("triage") / "t.db")
+    return TestClient(create_app(config, scorer=scorer, store=store))
+
+
+@pytest.fixture
+def client_and_store(fitted, tmp_path):
+    """A client whose service writes its decisions to a throwaway journal."""
+    scorer, config = fitted
+    store = TriageStore(tmp_path / "t.db")
+    return TestClient(create_app(config, scorer=scorer, store=store)), store
+
+
+def _decision_for(row: dict, outcome: str, note: str = "") -> Decision:
+    return Decision(
+        seq=0,
+        incident=str(row["id"]),
+        outcome=outcome,
+        note=note,
+        analyst="analyst",
+        decided_at="2026-09-20T12:00:00+00:00",
+        subject=str(row["subject"]),
+        relation=str(row["relation"]),
+        object=str(row["object"]),
+        score=float(row["score"]),
+    )
 
 
 def test_status_describes_what_is_running(client) -> None:
@@ -93,3 +124,50 @@ def test_the_reference_is_served(client) -> None:
     assert body["observations"]
     assert body["features"]
     assert {"edges", "features"} <= set(body["tables"])
+
+
+def test_an_open_incident_says_so(client_and_store) -> None:
+    client, _ = client_and_store
+    assert client.get("/api/incidents").json()["incidents"][0]["state"] == "open"
+
+
+def test_a_resolved_incident_leaves_the_queue(client_and_store) -> None:
+    client, store = client_and_store
+    first = client.get("/api/incidents").json()["incidents"][0]
+
+    store.record([_decision_for(first, "false_positive")])
+
+    remaining = client.get("/api/incidents").json()
+    assert first["id"] not in {row["id"] for row in remaining["incidents"]}
+    assert remaining["resolved"] == 1
+
+
+def test_a_reopened_incident_comes_back(client_and_store) -> None:
+    """A change of mind must put the change back in front of the analyst."""
+    client, store = client_and_store
+    first = client.get("/api/incidents").json()["incidents"][0]
+
+    store.record([_decision_for(first, "confirmed")])
+    store.record([_decision_for(first, "reopened")])
+
+    assert first["id"] in {row["id"] for row in client.get("/api/incidents").json()["incidents"]}
+
+
+def test_resolved_incidents_can_be_asked_for(client_and_store) -> None:
+    client, store = client_and_store
+    first = client.get("/api/incidents").json()["incidents"][0]
+    store.record([_decision_for(first, "accepted_risk")])
+
+    rows = client.get("/api/incidents?state=resolved").json()["incidents"]
+
+    assert [row["id"] for row in rows] == [first["id"]]
+    assert rows[0]["state"] == "accepted_risk"
+
+
+def test_the_counts_cover_the_whole_queue_not_the_page(client_and_store) -> None:
+    """A limit shortens the page; it must not shorten the tally above it."""
+    client, _ = client_and_store
+    payload = client.get("/api/incidents?limit=3").json()
+
+    assert len(payload["incidents"]) == 3
+    assert payload["open"] > 3
