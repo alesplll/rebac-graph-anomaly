@@ -1,0 +1,15 @@
+# Does a model survive a hidden set it has no template for?
+#
+# The companion to gnn.yaml: the same scorers on the same five seeds, over a dataset
+# whose evaluation window carries two patterns shaped unlike anything in the
+# training span. The number to read is recall at fifty on mutual_grant_ring and
+# convergent_access against recall on the five trained patterns.
+name: generalisation
+dataset: configs/generator/small-divergent.yaml
+seeds: [1, 2, 3, 4, 5]
+scorers:
+  - rules
+  - isolation_forest
+  - gnn
+  - gnn_supervised
+ks: [20, 50, 100]

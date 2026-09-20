@@ -71,7 +71,8 @@ def test_labels_cover_every_created_edge(context_factory) -> None:
         assert all(label.pattern == name for label in injection.labels)
 
 
-def test_all_eight_patterns_register() -> None:
+def test_every_pattern_registers() -> None:
+    """The last two are collective shapes, used only by the divergent dataset."""
     assert set(available_patterns()) == {
         "self_grant_admin",
         "privileged_group_join",
@@ -81,4 +82,6 @@ def test_all_eight_patterns_register() -> None:
         "cross_department",
         "shadow_group",
         "delegation_cascade",
+        "mutual_grant_ring",
+        "convergent_access",
     }

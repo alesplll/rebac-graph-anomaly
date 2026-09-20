@@ -6,6 +6,7 @@ for their side effect, hence the unused-import suppressions.
 
 from rga.generator.anomalies import (  # noqa: F401
     bypass,
+    collective,
     compromise,
     escalation,
     persistence,

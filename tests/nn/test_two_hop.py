@@ -23,7 +23,12 @@ def test_the_four_distances_are_told_apart() -> None:
     source = graph.index_of("user:a")
     src = np.full(4, source, dtype=np.int64)
     dst = np.array(
-        [source, graph.index_of("group:g1"), graph.index_of("group:g2"), graph.index_of("group:g4")],
+        [
+            source,
+            graph.index_of("group:g1"),
+            graph.index_of("group:g2"),
+            graph.index_of("group:g4"),
+        ],
         dtype=np.int64,
     )
 
