@@ -61,3 +61,23 @@ def test_the_window_width_limits_what_is_scored(scorer) -> None:
 def test_an_unknown_source_kind_is_refused() -> None:
     with pytest.raises(ValueError, match="unknown source"):
         replace(load_service_config(SYNTHETIC), source="carrier pigeon")
+
+
+def _recipe(tmp_path: Path, extra: str = "") -> Path:
+    path = tmp_path / "demo.yaml"
+    path.write_text(
+        "source:\n  kind: synthetic\n  dataset: configs/generator/small.yaml\n"
+        "model: artifacts/gnn-supervised\n" + extra,
+        encoding="utf-8",
+    )
+    return path
+
+
+def test_the_store_path_defaults_to_the_configuration_name(tmp_path: Path) -> None:
+    """Two demonstrations must not share a decision journal."""
+    assert load_service_config(_recipe(tmp_path)).store == Path("var/triage-demo.db")
+
+
+def test_the_store_path_can_be_set_explicitly(tmp_path: Path) -> None:
+    recipe = _recipe(tmp_path, "store: var/custom.db\n")
+    assert load_service_config(recipe).store == Path("var/custom.db")

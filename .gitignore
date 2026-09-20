@@ -19,3 +19,4 @@ experiments/runs/
 
 # Model artefacts are reproducible from their recipe, like experiment runs.
 artifacts/
+var/

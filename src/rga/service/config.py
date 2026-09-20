@@ -29,6 +29,9 @@ class ServiceConfig:
     user: str = "neo4j"
     password: str = "password123"
     mapping: Path = Path("configs/mapping/opens3.yaml")
+    #: Where the triage journal lives. One per configuration, so the synthetic
+    #: demonstration and the live one never share the analyst's decisions.
+    store: Path = Path("var/triage.db")
 
     def __post_init__(self) -> None:
         if self.source not in {"synthetic", "neo4j"}:
@@ -41,6 +44,7 @@ def load_service_config(path: Path) -> ServiceConfig:
     """Read a service configuration from YAML."""
     document = yaml.safe_load(path.read_text(encoding="utf-8"))
     source = document["source"]
+    default_store = Path("var") / f"triage-{path.stem}.db"
     return ServiceConfig(
         source=str(source["kind"]),
         model=Path(document["model"]),
@@ -51,4 +55,5 @@ def load_service_config(path: Path) -> ServiceConfig:
         user=str(source.get("user", "neo4j")),
         password=str(source.get("password", "password123")),
         mapping=Path(source.get("mapping", "configs/mapping/opens3.yaml")),
+        store=Path(document["store"]) if "store" in document else default_store,
     )
