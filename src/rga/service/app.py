@@ -8,11 +8,13 @@ and that lives in its own module which knows nothing about scoring.
 
 from __future__ import annotations
 
+import hashlib
+import re
 from datetime import UTC, datetime
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Query
-from fastapi.responses import FileResponse
+from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -26,6 +28,33 @@ from rga.service.config import ServiceConfig
 from rga.service.triage import OPEN_OUTCOME, OUTCOMES, TITLES, Decision, MemoryStore
 
 WEB = Path("web")
+
+
+def _versioned(page: Path) -> HTMLResponse:
+    """The markup with each asset addressed by the fingerprint of its contents.
+
+    `Cache-Control` only reaches a browser that asks, and one holding a copy taken
+    before the header existed does not ask: a response carrying no freshness
+    information is cached heuristically, for hours. That is not theory — it left a
+    stale script running against fresh markup twice, with nothing on screen to say
+    so. A fingerprint in the URL settles it: a changed file is a different address,
+    and there is nothing cached under it.
+
+    The markup itself is therefore the one thing that must never be stored, since it
+    is what carries the fingerprints.
+    """
+    markup = page.read_text(encoding="utf-8")
+
+    def stamp(match: re.Match[str]) -> str:
+        name = match.group(1)
+        asset = WEB / name
+        if not asset.is_file():
+            return match.group(0)
+        digest = hashlib.sha256(asset.read_bytes()).hexdigest()[:12]
+        return f"/static/{name}?v={digest}"
+
+    markup = re.sub(r"/static/([A-Za-z0-9_.-]+)", stamp, markup)
+    return HTMLResponse(markup, headers={"Cache-Control": "no-store"})
 
 
 class DecisionRequest(BaseModel):
@@ -286,24 +315,18 @@ def create_app(
 
         @app.middleware("http")
         async def always_revalidate(request, call_next):
-            """Never let a browser run yesterday's script against today's markup.
-
-            It happened once: a cached app.js reached for an element the new page no
-            longer had, threw, and left the console inert with no error anywhere the
-            analyst could see. `no-cache` does not forbid caching — it requires the
-            browser to ask, and the ETag makes the answer a 304.
-            """
+            """Never let a browser run yesterday's script against today's markup."""
             response = await call_next(request)
-            if request.url.path == "/" or request.url.path.startswith(("/static", "/reference")):
+            if request.url.path.startswith(("/static", "/reference")):
                 response.headers["Cache-Control"] = "no-cache"
             return response
 
         @app.get("/")
-        def page() -> FileResponse:
-            return FileResponse(WEB / "index.html")
+        def page() -> HTMLResponse:
+            return _versioned(WEB / "index.html")
 
         @app.get("/reference")
-        def help_view() -> FileResponse:
-            return FileResponse(WEB / "reference.html")
+        def help_view() -> HTMLResponse:
+            return _versioned(WEB / "reference.html")
 
     return app

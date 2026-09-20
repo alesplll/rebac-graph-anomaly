@@ -57,3 +57,11 @@ def test_the_page_and_the_service_agree_on_the_state_names() -> None:
 
     for state in ("open", "dismissed", "revoked"):
         assert TITLES[state] in script, f"{state} is called {TITLES[state]!r} by the service"
+
+
+def test_the_page_reports_its_own_failures() -> None:
+    """Twice a broken script left an empty screen and said nothing about why."""
+    script = (WEB / "app.js").read_text(encoding="utf-8")
+
+    assert 'addEventListener("error"' in script
+    assert 'addEventListener("unhandledrejection"' in script

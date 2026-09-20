@@ -50,7 +50,11 @@ const context = {
       return Array.from({ length: count }, (_, index) => element(`${selector}#${index}`));
     },
   },
-  window: { location: { origin: "http://service" } },
+  window: {
+    location: { origin: "http://service" },
+    // The page listens for its own failures; the stub has to let it.
+    addEventListener() {},
+  },
   localStorage: { getItem: () => null, setItem() {} },
   URL,
   console,

@@ -348,7 +348,7 @@ def test_the_page_and_its_assets_are_always_revalidated(client) -> None:
     it simply sat there. These headers make the browser ask every time; the ETag
     keeps the answer cheap.
     """
-    for path in ("/", "/static/app.js", "/static/style.css"):
+    for path in ("/static/app.js", "/static/style.css"):
         headers = client.get(path).headers
         assert headers.get("cache-control") == "no-cache", path
 
@@ -383,3 +383,37 @@ def test_a_reopened_change_reads_as_open(client_and_store) -> None:
     )
 
     assert row["state_title"] == "Открыто"
+
+
+def test_the_page_names_its_assets_by_content(client) -> None:
+    """A browser cannot serve a cached copy of a URL it has never seen.
+
+    `Cache-Control` only reaches a browser that asks, and one holding a copy taken
+    before the header existed does not ask: a response with no freshness information
+    is cached heuristically. Putting the file's own fingerprint in the URL sidesteps
+    the question — a changed file is a different address.
+    """
+    markup = client.get("/").text
+
+    assert "/static/app.js?v=" in markup
+    assert "/static/style.css?v=" in markup
+
+
+def test_the_fingerprint_follows_the_file(client, tmp_path) -> None:
+    from pathlib import Path as _Path
+
+    before = client.get("/").text
+    script = _Path("web/app.js")
+    kept = script.read_text(encoding="utf-8")
+    try:
+        script.write_text(kept + "\n// a change\n", encoding="utf-8")
+        after = client.get("/").text
+    finally:
+        script.write_text(kept, encoding="utf-8")
+
+    assert before != after
+
+
+def test_the_page_itself_is_never_stored(client) -> None:
+    """The markup carries the fingerprints, so it is the one thing that must be fresh."""
+    assert client.get("/").headers.get("cache-control") == "no-store"
