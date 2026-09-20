@@ -33,7 +33,7 @@ uv run rga serve --config configs/service/synthetic.yaml
 ## Часть 2: живой движок
 
 ```bash
-cd ../opens3-rebac && git checkout feat/graph-timestamps && docker compose up -d --wait neo4j
+cd ../opens3-rebac && git checkout main && docker compose up -d --wait neo4j
 cd ../rebac-graph-anomaly
 uv run python scripts/fill_live_graph.py --config configs/generator/small-history.yaml
 uv run rga serve --config configs/service/opens3.yaml

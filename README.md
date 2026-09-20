@@ -59,8 +59,8 @@ authorization engine writes to, and its graph has to carry edge timestamps — t
 capability level 1, without which there is no change log to score.
 
 ```bash
-# 1. the engine's database, from the branch that records timestamps and actors
-cd ../opens3-rebac && git checkout feat/graph-timestamps
+# 1. the engine's database; main records timestamps and actors since PR #70
+cd ../opens3-rebac && git checkout main
 docker compose up -d --wait neo4j
 
 # 2. a populated graph: on an empty one every change looks unusual
