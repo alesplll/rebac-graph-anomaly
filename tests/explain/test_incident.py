@@ -67,3 +67,39 @@ def test_every_subgraph_node_has_a_hop_distance(fitted) -> None:
     assert all(isinstance(node["hops"], int) for node in subgraph["nodes"])
     assert min(node["hops"] for node in subgraph["nodes"]) == 0
     assert np.isfinite([edge["importance"] for edge in subgraph["edges"]]).all()
+
+
+def test_only_the_explaining_edges_are_drawn(fitted) -> None:
+    """Sixty edges of a two-hop ball is a thicket; the score leans on a handful."""
+    from rga.explain.incident import DRAWN_EDGES
+
+    scorer, evaluation = fitted
+    card = build_incident(scorer, evaluation, 0, score=0.9, rank=1, cap=60)
+
+    assert len(card.subgraph["edges"]) <= DRAWN_EDGES + 1
+
+
+def test_the_drawn_edges_are_the_ones_that_matter(fitted) -> None:
+    """Whatever is drawn must be among the heaviest contributors, or the change."""
+    from rga.explain.incident import DRAWN_EDGES
+
+    scorer, evaluation = fitted
+    card = build_incident(scorer, evaluation, 0, score=0.9, rank=1, cap=60)
+
+    weights = sorted((abs(item.importance) for item in card.edges), reverse=True)
+    cut = weights[DRAWN_EDGES - 1] if len(weights) >= DRAWN_EDGES else 0.0
+    subject, _, target = evaluation.keys[0]
+
+    for edge in card.subgraph["edges"]:
+        is_the_change = (edge["subject"], edge["object"]) == (subject, target)
+        assert is_the_change or abs(edge["importance"]) >= cut
+
+
+def test_the_neighbourhood_is_still_measured_in_full(fitted) -> None:
+    """Only the drawing is trimmed: the contributions table keeps every edge."""
+    from rga.explain.incident import DRAWN_EDGES
+
+    scorer, evaluation = fitted
+    card = build_incident(scorer, evaluation, 0, score=0.9, rank=1, cap=60)
+
+    assert len(card.edges) > DRAWN_EDGES + 1

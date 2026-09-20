@@ -120,6 +120,16 @@ def _distances(graph, seeds: tuple[str, ...], *, depth: int) -> dict[str, int]:
     return hops
 
 
+#: How many neighbouring relationships the drawing shows.
+#:
+#: The two-hop ball around a change runs to dozens of edges and draws as a thicket;
+#: untangling it helps, but the real trouble is the count, not the layout. The score
+#: does not lean on dozens of relationships — it leans on a handful, and the picture
+#: exists to show which. Everything else stays in the contributions table, where a
+#: number reads better than a line anyway.
+DRAWN_EDGES = 6
+
+
 def _subgraph(candidates: CandidateSet, position: int, edges, *, cap: int) -> dict[str, list]:
     """Nodes and edges around the change, each node with its distance in hops."""
     graph = candidates.graph
@@ -129,9 +139,25 @@ def _subgraph(candidates: CandidateSet, position: int, edges, *, cap: int) -> di
     importance = {(item.subject, item.relation, item.object): item.importance for item in edges}
     positions = neighbourhood(graph, subject, target, cap=cap)
 
+    def weight(edge: int) -> float:
+        source = graph.node_ids[int(graph.edge_src[edge])]
+        sink = graph.node_ids[int(graph.edge_dst[edge])]
+        if (source, sink) == (subject, target):
+            # The change itself is always drawn: it is what the card is about.
+            return float("inf")
+        relation = RelationType(int(graph.edge_rel[edge])).name
+        return abs(float(importance.get((source, relation, sink), 0.0)))
+
+    # The change and the contributors are picked separately. Taking the top seven of
+    # everything would silently drop a contributor whenever the change is already in
+    # the graph, and admit a seventh whenever it is not.
+    ordered = sorted(positions.tolist(), key=weight, reverse=True)
+    itself = [edge for edge in ordered if weight(edge) == float("inf")]
+    chosen = itself + [edge for edge in ordered if edge not in itself][:DRAWN_EDGES]
+
     hops = {name: 0 for name in (subject, target) if name in graph.node_index}
     drawn = []
-    for edge in positions:
+    for edge in chosen:
         source = graph.node_ids[int(graph.edge_src[edge])]
         sink = graph.node_ids[int(graph.edge_dst[edge])]
         relation = RelationType(int(graph.edge_rel[edge])).name
