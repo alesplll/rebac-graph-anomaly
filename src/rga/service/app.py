@@ -8,11 +8,13 @@ and that lives in its own module which knows nothing about scoring.
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel
 
 from rga.domain.entities import entity_type
 from rga.domain.relations import PermissionLevel, RelationType
@@ -21,9 +23,17 @@ from rga.explain.reference import reference
 from rga.explain.structure import neighbourhood
 from rga.service.analysis import Analysis, analyse
 from rga.service.config import ServiceConfig
-from rga.service.triage import OPEN_OUTCOME, TriageStore
+from rga.service.triage import OPEN_OUTCOME, OUTCOMES, Decision, TriageStore
 
 WEB = Path("web")
+
+
+class DecisionRequest(BaseModel):
+    """What the analyst decided about a selection of changes."""
+
+    incidents: list[str]
+    outcome: str
+    note: str = ""
 
 
 def _grouped(rows: list[dict[str, object]], by: str) -> list[dict[str, object]]:
@@ -174,13 +184,65 @@ def create_app(
         if position is None:
             raise HTTPException(status_code=404, detail="no such change in the current window")
         rank = int(analysis.order.tolist().index(position)) + 1
-        return build_incident(
+        card = build_incident(
             scorer,
             analysis.candidates,
             position,
             score=float(analysis.scores[position]),
             rank=rank,
         ).as_dict()
+
+        decision = store.current().get(incident)
+        card["decision"] = decision.as_dict() if decision is not None else None
+        card["history"] = [entry.as_dict() for entry in store.history(incident=incident)]
+        return card
+
+    @app.post("/api/decisions")
+    def decide(request: DecisionRequest) -> dict[str, object]:
+        """Record one judgement per selected change."""
+        if request.outcome not in OUTCOMES:
+            raise HTTPException(status_code=422, detail=f"unknown outcome: {request.outcome}")
+        if not request.incidents:
+            raise HTTPException(status_code=422, detail="no changes were selected")
+
+        analysis = current()
+        decided_at = datetime.now(UTC).isoformat(timespec="seconds")
+        entries: list[Decision] = []
+        unknown: list[str] = []
+
+        for identifier in request.incidents:
+            position = analysis.find(identifier)
+            if position is None:
+                # Recorded regardless: a decision stands on its own, and the window
+                # may have moved since the analyst last loaded the page.
+                unknown.append(identifier)
+                subject, relation, target, score = "", "", "", 0.0
+            else:
+                key = analysis.candidates.keys[position]
+                subject, relation, target = key[0], RelationType(key[1]).name, key[2]
+                score = float(analysis.scores[position])
+
+            entries.append(
+                Decision(
+                    seq=0,
+                    incident=identifier,
+                    outcome=request.outcome,
+                    note=request.note,
+                    analyst="analyst",
+                    decided_at=decided_at,
+                    subject=subject,
+                    relation=relation,
+                    object=target,
+                    score=score,
+                )
+            )
+
+        store.record(entries)
+        return {"recorded": len(entries), "unknown": unknown}
+
+    @app.get("/api/decisions")
+    def decisions(limit: int = Query(default=200, ge=1, le=1000)) -> dict[str, object]:
+        return {"decisions": [entry.as_dict() for entry in store.history(limit=limit)]}
 
     @app.get("/api/nodes")
     def node(id: str = Query(...)) -> dict[str, object]:

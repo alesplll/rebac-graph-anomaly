@@ -246,3 +246,96 @@ def test_grouping_by_object_uses_the_object(client_and_store) -> None:
 
     keys = {group["key"] for group in payload["groups"]}
     assert keys == {row["object"] for row in payload["incidents"]}
+
+
+def test_a_decision_is_recorded_and_removes_the_change(client_and_store) -> None:
+    client, _ = client_and_store
+    first = client.get("/api/incidents").json()["incidents"][0]
+
+    answer = client.post(
+        "/api/decisions",
+        json={
+            "incidents": [first["id"]],
+            "outcome": "accepted_risk",
+            "note": "плановые работы",
+        },
+    )
+
+    assert answer.status_code == 200
+    assert answer.json() == {"recorded": 1, "unknown": []}
+    queue = client.get("/api/incidents").json()["incidents"]
+    assert first["id"] not in {row["id"] for row in queue}
+
+
+def test_one_call_decides_several_changes(client_and_store) -> None:
+    """The whole point of grouping: close a subject's changes in one act."""
+    client, _ = client_and_store
+    rows = client.get("/api/incidents").json()["incidents"][:3]
+
+    answer = client.post(
+        "/api/decisions",
+        json={"incidents": [row["id"] for row in rows], "outcome": "false_positive"},
+    )
+
+    assert answer.json()["recorded"] == 3
+    assert len(client.get("/api/decisions").json()["decisions"]) == 3
+
+
+def test_the_note_reaches_the_journal(client_and_store) -> None:
+    client, _ = client_and_store
+    first = client.get("/api/incidents").json()["incidents"][0]
+
+    client.post(
+        "/api/decisions",
+        json={"incidents": [first["id"]], "outcome": "confirmed", "note": "передано в SOC"},
+    )
+
+    assert client.get("/api/decisions").json()["decisions"][0]["note"] == "передано в SOC"
+
+
+def test_an_unknown_outcome_is_refused(client_and_store) -> None:
+    client, _ = client_and_store
+    first = client.get("/api/incidents").json()["incidents"][0]
+
+    answer = client.post("/api/decisions", json={"incidents": [first["id"]], "outcome": "maybe"})
+
+    assert answer.status_code == 422
+
+
+def test_an_empty_selection_is_refused(client_and_store) -> None:
+    client, _ = client_and_store
+    answer = client.post("/api/decisions", json={"incidents": [], "outcome": "confirmed"})
+    assert answer.status_code == 422
+
+
+def test_a_change_outside_the_window_is_still_recorded(client_and_store) -> None:
+    """The journal is self-contained; it does not need the incident to exist."""
+    client, _ = client_and_store
+
+    answer = client.post(
+        "/api/decisions", json={"incidents": ["deadbeefdeadbeef"], "outcome": "confirmed"}
+    )
+
+    assert answer.json() == {"recorded": 1, "unknown": ["deadbeefdeadbeef"]}
+
+
+def test_the_card_carries_its_decision_and_its_history(client_and_store) -> None:
+    client, _ = client_and_store
+    first = client.get("/api/incidents").json()["incidents"][0]
+    client.post("/api/decisions", json={"incidents": [first["id"]], "outcome": "confirmed"})
+    client.post("/api/decisions", json={"incidents": [first["id"]], "outcome": "reopened"})
+
+    card = client.get(f"/api/incidents/{first['id']}").json()
+
+    assert card["decision"]["outcome"] == "reopened"
+    assert [entry["outcome"] for entry in card["history"]] == ["reopened", "confirmed"]
+
+
+def test_an_undecided_card_says_so(client_and_store) -> None:
+    client, _ = client_and_store
+    first = client.get("/api/incidents").json()["incidents"][0]
+
+    card = client.get(f"/api/incidents/{first['id']}").json()
+
+    assert card["decision"] is None
+    assert card["history"] == []
