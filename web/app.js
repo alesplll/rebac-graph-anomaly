@@ -89,13 +89,23 @@ async function get(path, params) {
   return response.json();
 }
 
+// Small independent chips rather than one long sentence: a sentence grew past the
+// width of the header and pushed the tabs onto a second line.
+function chip(label, value, title) {
+  return `<span class="chip" title="${escapeHtml(title || label)}">` +
+    `<span class="chip-key">${escapeHtml(label)}</span>${escapeHtml(value)}</span>`;
+}
+
 async function loadStatus() {
   const body = await get("/api/status");
-  const source = body.source === "synthetic" ? "синтетика" : "живой opens3-rebac";
+  const source = body.source === "synthetic" ? "синтетика" : "opens3-rebac";
   const edge = when(body.window.end);
-  statusLine.textContent =
-    `${source} · уровень ${body.capability_level} · ${body.scorer} · ` +
-    `окно до ${edge.date} · ${body.candidates} изменений`;
+  statusLine.innerHTML =
+    chip("источник", source) +
+    chip("уровень", body.capability_level, "уровень возможностей источника") +
+    chip("модель", body.scorer) +
+    chip("окно до", edge.date) +
+    chip("всего", body.candidates, "изменений в окне оценки");
 }
 
 /* ---- the queue --------------------------------------------------------- */
@@ -138,7 +148,7 @@ function rowMarkup(item) {
   return `<input type="checkbox" data-pick="${escapeHtml(item.id)}"${
       state.selected.has(item.id) ? " checked" : ""}>
     <span class="rank">${item.rank}</span>
-    <span class="score" style="color:${heat(item.score)}">${item.score.toFixed(3)}</span>
+    <span class="score" style="background:${heat(item.score)}">${item.score.toFixed(3)}</span>
     <span class="at">${moment.date} ${moment.time}</span>
     <span class="what">${node(item.subject)} <span class="rel">${escapeHtml(item.relation)}</span> ${
       node(item.object)}${level}${badge}</span>`;
@@ -407,11 +417,6 @@ async function openCard(id) {
 
 /* ---- wiring ------------------------------------------------------------ */
 
-function theme(next) {
-  document.documentElement.dataset.theme = next;
-  try { localStorage.setItem("theme", next); } catch (error) { /* private window */ }
-}
-
 function showTab(name) {
   state.tab = name;
   document.getElementById("workspace").hidden = name !== "queue";
@@ -449,18 +454,12 @@ document.querySelectorAll(".tabs button").forEach((button) => {
   button.addEventListener("click", () => showTab(button.dataset.tab));
 });
 
-document.getElementById("theme").addEventListener("click", () => {
-  theme(document.documentElement.dataset.theme === "dark" ? "light" : "dark");
-});
-
 document.getElementById("refresh").addEventListener("click", async () => {
   statusLine.textContent = "Перечитываем источник…";
   await fetch("/api/refresh", { method: "POST" });
   await loadStatus();
   await loadQueue();
 });
-
-try { theme(localStorage.getItem("theme") || "light"); } catch (error) { theme("light"); }
 
 // The glossary comes from the service so the table can speak Russian without
 // keeping a second copy of the feature names in the page.

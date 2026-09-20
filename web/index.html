@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="ru" data-theme="light">
+<html lang="ru">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -9,43 +9,46 @@
 <body>
   <header id="top">
     <span class="brand">Изменения прав доступа</span>
-    <span id="status" class="status">Загрузка…</span>
+    <div id="status" class="chips"></div>
+    <div class="actions">
+      <a class="button ghost" href="/reference">Справочник</a>
+      <button id="refresh" class="button" type="button">Обновить</button>
+    </div>
+  </header>
+
+  <div id="bar">
     <nav class="tabs">
       <button type="button" data-tab="queue" class="active">Очередь</button>
       <button type="button" data-tab="history">История</button>
     </nav>
-    <a class="link" href="/reference">Справочник</a>
-    <button id="refresh" type="button" title="Перечитать источник">Обновить</button>
-    <button id="theme" type="button" title="Светлая или тёмная тема">◐</button>
-  </header>
-
-  <section id="filters">
-    <input id="search" type="search" placeholder="Субъект, объект или инициатор">
-    <select id="state" title="Какие изменения показывать">
-      <option value="open">Открытые</option>
-      <option value="resolved">Разобранные</option>
-      <option value="all">Все</option>
-    </select>
-    <select id="outcome" title="Решение аналитика" disabled>
-      <option value="">Любое решение</option>
-      <option value="confirmed">Подтверждено</option>
-      <option value="false_positive">Ложное срабатывание</option>
-      <option value="accepted_risk">Принятый риск</option>
-    </select>
-    <select id="group" title="Сгруппировать очередь">
-      <option value="none">Без группировки</option>
-      <option value="subject">По субъекту</option>
-      <option value="object">По объекту</option>
-    </select>
+    <section id="filters">
+      <input id="search" type="search" placeholder="Субъект, объект или инициатор">
+      <select id="state" title="Какие изменения показывать">
+        <option value="open">Открытые</option>
+        <option value="resolved">Разобранные</option>
+        <option value="all">Все</option>
+      </select>
+      <select id="outcome" title="Решение аналитика" disabled>
+        <option value="">Любое решение</option>
+        <option value="confirmed">Подтверждено</option>
+        <option value="false_positive">Ложное срабатывание</option>
+        <option value="accepted_risk">Принятый риск</option>
+      </select>
+      <select id="group" title="Сгруппировать очередь">
+        <option value="none">Без группировки</option>
+        <option value="subject">По субъекту</option>
+        <option value="object">По объекту</option>
+      </select>
+    </section>
     <span id="counter" class="counter"></span>
-  </section>
+  </div>
 
   <main id="workspace">
     <section id="queue" class="panel"></section>
     <article id="card" class="panel">
-      <p class="hint">Выберите изменение из списка слева — система покажет, что в нём
-        необычного и на какие связи она при этом опиралась. Решение принимает
-        специалист; система лишь раскладывает основания.</p>
+      <p class="empty">Выберите изменение слева.<br>
+        Система покажет, что в нём необычного и на какие связи она опиралась.
+        Решение принимает специалист — она лишь раскладывает основания.</p>
     </article>
   </main>
 
@@ -54,11 +57,11 @@
   <div id="selection" hidden>
     <span id="selected"></span>
     <input id="note" type="text" placeholder="Заметка к решению">
-    <button type="button" data-outcome="confirmed">Подтверждено</button>
-    <button type="button" data-outcome="false_positive">Ложное срабатывание</button>
-    <button type="button" data-outcome="accepted_risk">Принятый риск</button>
-    <button type="button" data-outcome="reopened" id="reopen" hidden>Вернуть в работу</button>
-    <button type="button" id="clear">Снять выбор</button>
+    <button type="button" class="button" data-outcome="confirmed">Подтверждено</button>
+    <button type="button" class="button" data-outcome="false_positive">Ложное срабатывание</button>
+    <button type="button" class="button" data-outcome="accepted_risk">Принятый риск</button>
+    <button type="button" class="button" data-outcome="reopened" id="reopen" hidden>Вернуть в работу</button>
+    <button type="button" class="button ghost" id="clear">Снять</button>
   </div>
 
   <script src="/static/app.js"></script>

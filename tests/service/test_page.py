@@ -32,19 +32,24 @@ def test_the_page_pronounces_no_verdict(name) -> None:
 
 
 def test_the_page_carries_the_console_furniture() -> None:
-    """A monitoring tool needs a filter bar, a selection bar and a theme switch."""
+    """A monitoring tool needs a filter bar, tabs and a selection bar."""
     markup = (WEB / "index.html").read_text(encoding="utf-8")
 
-    for marker in ('id="filters"', 'id="queue"', 'id="selection"', 'id="history"', 'id="theme"'):
+    for marker in ('id="filters"', 'id="queue"', 'id="selection"', 'id="history"', 'data-tab='):
         assert marker in markup, marker
 
 
-def test_the_stylesheet_defines_both_themes() -> None:
-    """The defence room has a projector; a dark-only console is a risk there."""
+def test_there_is_exactly_one_theme() -> None:
+    """A switch is one more thing to be in the wrong state when the projector is on.
+
+    The palette lives in a single token block; nothing chooses between two of them.
+    """
     css = (WEB / "style.css").read_text(encoding="utf-8")
+    script = (WEB / "app.js").read_text(encoding="utf-8")
 
     assert ":root" in css
-    assert '[data-theme="dark"]' in css
+    assert "data-theme" not in css
+    assert "data-theme" not in script
 
 
 def test_the_stylesheet_paints_through_tokens() -> None:
@@ -82,7 +87,6 @@ def test_the_script_wires_the_console_together() -> None:
         "data-pick",
         "renderHistory",
         "shiftKey",
-        "localStorage",
     ):
         assert marker in script, marker
 
