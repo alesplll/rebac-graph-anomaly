@@ -139,13 +139,17 @@ async function setState(id, chosen) {
     statusLine.textContent = "Состояние не записано, попробуйте ещё раз";
     return;
   }
-  // The row fades before the list is rebuilt, so a decision is visible as it takes
-  // effect rather than the list silently jumping.
+  // The row fades out of the list while the card stays open, so the decision is
+  // visible where it was made and where it lands.
   const row = queue.querySelector(`li[data-id="${id}"]`);
   if (row) row.classList.add("leaving");
   await loadQueue();
+  await openCard(id);
 }
 
+// The control sits on the card, where there is room for it and where the analyst is
+// already reading the grounds. In the list it stole space from the one thing the
+// list is for — reading the change — and invited deciding without looking.
 function stateControl(item) {
   const options = [
     ["open", "Открыто"],
@@ -155,8 +159,16 @@ function stateControl(item) {
     .map(([value, title]) =>
       `<option value="${value}"${value === item.state ? " selected" : ""}>${title}</option>`)
     .join("");
-  return `<select class="state-pick ${escapeHtml(item.state)}" data-state="${
-    escapeHtml(item.id)}" title="Состояние разбора">${options}</select>`;
+  return `<label class="verdict-state">Состояние
+    <select class="state-pick ${escapeHtml(item.state)}" data-state="${
+      escapeHtml(item.id)}">${options}</select></label>`;
+}
+
+// A decided change still says so in the list, but only as a word: nothing to click,
+// and in the default view of open changes it never appears at all.
+function stateBadge(item) {
+  if (!item.state || item.state === "open") return "";
+  return ` <span class="badge ${escapeHtml(item.state)}">${escapeHtml(item.state_title)}</span>`;
 }
 
 async function loadQueue() {
@@ -179,15 +191,10 @@ async function loadQueue() {
        <span class="score" style="color:${heat(item.score)}">${item.score.toFixed(3)}</span>
        <span class="chain">${node(item.subject)} <span class="verb">${
          escapeHtml(verb(item.relation))}</span> ${node(item.object)}${level}${own}</span>
-       ${stateControl(item)}
        <span class="bar"><span style="width:${
          Math.max(3, item.score * 100)}%;background:${heat(item.score)}"></span></span>
-       <span class="row-when">${moment.date}, ${moment.time}</span>`;
-    row.addEventListener("click", (event) => {
-      // The state control lives inside the row; choosing in it is not opening it.
-      if (event.target.dataset && event.target.dataset.state) return;
-      openCard(item.id);
-    });
+       <span class="row-when">${moment.date}, ${moment.time}${stateBadge(item)}</span>`;
+    row.addEventListener("click", () => openCard(item.id));
     queue.append(row);
   });
 }
@@ -277,6 +284,7 @@ async function openCard(id) {
     `<div class="headline">
        <span class="verdict" style="color:${heat(body.score)}">${body.score.toFixed(3)}</span>
        <span class="place">место ${body.rank} в очереди на разбор</span>
+       ${stateControl(body)}
      </div>
      ${factsBlock(body)}
      <h2>Что здесь необычного</h2>
@@ -313,7 +321,7 @@ document.getElementById("filter-subject").addEventListener("keydown", (event) =>
   if (event.key === "Enter") loadQueue();
 });
 
-queue.addEventListener("change", (event) => {
+card.addEventListener("change", (event) => {
   const id = event.target.dataset && event.target.dataset.state;
   if (id) setState(id, event.target.value);
 });

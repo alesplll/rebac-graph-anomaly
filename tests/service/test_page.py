@@ -97,3 +97,15 @@ def test_enter_searches_too() -> None:
     script = (WEB / "app.js").read_text(encoding="utf-8")
 
     assert "Enter" in script
+
+
+def test_the_state_control_lives_on_the_card_not_in_the_list() -> None:
+    """The list has one job — scanning — and little room; the card has the space."""
+    script = (WEB / "app.js").read_text(encoding="utf-8")
+
+    row = script.split("function rowMarkup", 1)[-1]
+    row = script.split("body.incidents.forEach", 1)[1].split("queue.append(row)", 1)[0]
+    assert "stateControl" not in row
+
+    opened = script.split("async function openCard", 1)[1]
+    assert "stateControl" in opened

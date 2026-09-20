@@ -224,6 +224,9 @@ def create_app(
         ).as_dict()
 
         decision = store.current().get(incident)
+        resolved = decision is not None and decision.outcome != OPEN_OUTCOME
+        card["state"] = decision.outcome if resolved else "open"
+        card["state_title"] = TITLES[card["state"]]
         card["decision"] = decision.as_dict() if decision is not None else None
         card["history"] = [entry.as_dict() for entry in store.history(incident=incident)]
         return card

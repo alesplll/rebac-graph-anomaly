@@ -417,3 +417,25 @@ def test_the_fingerprint_follows_the_file(client, tmp_path) -> None:
 def test_the_page_itself_is_never_stored(client) -> None:
     """The markup carries the fingerprints, so it is the one thing that must be fresh."""
     assert client.get("/").headers.get("cache-control") == "no-store"
+
+
+def test_the_card_states_where_the_change_stands(client_and_store) -> None:
+    """The control that changes the state lives on the card, so the card says it."""
+    client, store = client_and_store
+    first = client.get("/api/incidents").json()["incidents"][0]
+
+    open_card = client.get(f"/api/incidents/{first['id']}").json()
+    assert (open_card["state"], open_card["state_title"]) == ("open", "Открыто")
+
+    store.record([_decision_for(first, "revoked")])
+    decided = client.get(f"/api/incidents/{first['id']}").json()
+    assert (decided["state"], decided["state_title"]) == ("revoked", "Права отозваны")
+
+
+def test_a_reopened_card_reads_as_open(client_and_store) -> None:
+    client, store = client_and_store
+    first = client.get("/api/incidents").json()["incidents"][0]
+    store.record([_decision_for(first, "revoked")])
+    store.record([_decision_for(first, "reopened")])
+
+    assert client.get(f"/api/incidents/{first['id']}").json()["state"] == "open"

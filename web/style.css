@@ -125,7 +125,7 @@ main {
 #queue { list-style: none; margin: 0; padding: 0; }
 #queue li {
   display: grid;
-  grid-template-columns: 2.4rem 4.2rem minmax(0, 1fr) auto;
+  grid-template-columns: 2.4rem 4.2rem minmax(0, 1fr);
   align-items: baseline;
   gap: 4px 12px;
   padding: 9px 16px;
@@ -160,17 +160,31 @@ main {
 .tag.level { color: var(--bucket); border-color: var(--bucket); }
 .tag.alarm { color: var(--hot); border-color: var(--hot); }
 
-.state-pick {
-  grid-column: 4;
-  grid-row: 1 / span 3;
-  align-self: center;
+/* Состояние живёт на карточке, рядом с основаниями, по которым его выбирают. */
+.verdict-state {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--faint);
   font-size: 12px;
-  padding: 3px 7px;
-  color: var(--muted);
-  cursor: pointer;
 }
-.state-pick.dismissed { background: var(--paper); }
+.state-pick { font-size: 13px; padding: 4px 9px; cursor: pointer; }
+.state-pick.dismissed { background: var(--paper); color: var(--muted); }
 .state-pick.revoked { color: var(--hot); border-color: var(--hot); }
+
+/* В списке состояние только называется — нажимать там нечего, и в виде по
+   умолчанию, где одни открытые, значка не видно вовсе. */
+.badge {
+  font-size: 11px;
+  padding: 1px 7px;
+  margin-left: 8px;
+  border-radius: 999px;
+  border: 1px solid var(--rule);
+  color: var(--muted);
+  white-space: nowrap;
+}
+.badge.revoked { color: var(--hot); border-color: var(--hot); }
 
 /* ── карточка ──────────────────────────────────────────────────────────── */
 
