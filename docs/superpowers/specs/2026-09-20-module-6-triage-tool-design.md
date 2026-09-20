@@ -157,7 +157,7 @@ GET  /api/incidents
 
 POST /api/decisions
      {"incidents": ["id", ...], "outcome": "...", "note": "..."}
-     -> {"recorded": N}
+     -> {"recorded": N, "unknown": ["id", ...]}
 
 GET  /api/decisions?limit=200        история, новые сверху
      -> {"decisions": [...]}
