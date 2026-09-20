@@ -16,6 +16,7 @@
 | `gnn-full.md` | То же сравнение на полном наборе: 8 отделов, 312 пользователей | `uv run rga evaluate --config configs/experiments/gnn-full.yaml --out experiments/runs/gnn-full` |
 | `module5.md` | Три самообучаемых варианта против лучшего классического метода | `uv run rga evaluate --config configs/experiments/module5.yaml --out experiments/runs/module5` |
 | `score-terms.md` | Каждое слагаемое оценки по отдельности, по трём вариантам | `uv run python scripts/term_study.py` |
+| `sensitivity.md` | Сетка 3×3 по глубине и ширине: проверка устойчивости, а не подбор | `uv run python scripts/sensitivity_study.py` |
 | `generalisation.md` | Скрытые паттерны, непохожие по форме на обучающие | `uv run rga evaluate --config configs/experiments/generalisation.yaml --out experiments/runs/generalisation` |
 | `two-hop.md` | На каком расстоянии стояли концы изменения до его появления | `uv run python scripts/two_hop_study.py` |
 
