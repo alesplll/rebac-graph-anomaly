@@ -82,14 +82,19 @@ and the relation mapping. Edit that file for a different deployment.
 ```bash
 uv run rga generate --config configs/generator/small.yaml --out data/small
 uv run rga evaluate --config configs/experiments/gnn.yaml --out experiments/runs/gnn
+uv run python scripts/profile_epoch.py
 uv run pytest -m "not integration and not gpu"
 uv run ruff check .
 ```
 
+`configs/experiments/` also holds `module5.yaml`, which compares the self-supervised
+variants, and `generalisation.yaml`, which evaluates against hidden patterns shaped
+unlike the training ones.
+
 ## Documents
 
 `docs/thesis/` holds the result tables, each reproducible by one command.
-`docs/module-3-findings.md` records what the neural module measured, including three
-negative results and their causes. `docs/demo.md` is the demonstration running order,
+`docs/module-3-findings.md` and `docs/module-5-findings.md` record what the neural
+modules measured, negative results included, each traced to a cause. `docs/demo.md` is the demonstration running order,
 `docs/run-on-gpu.md` what to run on the GPU machine. Designs and per-module plans are
 under `docs/superpowers/`.
