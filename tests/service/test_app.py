@@ -339,3 +339,16 @@ def test_an_undecided_card_says_so(client_and_store) -> None:
 
     assert card["decision"] is None
     assert card["history"] == []
+
+
+def test_the_page_and_its_assets_are_always_revalidated(client) -> None:
+    """A cached script against fresh markup is a dead page, and it happened.
+
+    The browser kept an older app.js, which reached for an element the new markup
+    no longer has, threw, and left the console inert. Nothing in the page said so —
+    it simply sat there. These headers make the browser ask every time; the ETag
+    keeps the answer cheap.
+    """
+    for path in ("/", "/static/app.js", "/static/style.css"):
+        headers = client.get(path).headers
+        assert headers.get("cache-control") == "no-cache", path

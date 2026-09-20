@@ -282,6 +282,20 @@ def create_app(
     if WEB.is_dir():
         app.mount("/static", StaticFiles(directory=WEB), name="static")
 
+        @app.middleware("http")
+        async def always_revalidate(request, call_next):
+            """Never let a browser run yesterday's script against today's markup.
+
+            It happened once: a cached app.js reached for an element the new page no
+            longer had, threw, and left the console inert with no error anywhere the
+            analyst could see. `no-cache` does not forbid caching — it requires the
+            browser to ask, and the ETag makes the answer a 304.
+            """
+            response = await call_next(request)
+            if request.url.path == "/" or request.url.path.startswith(("/static", "/reference")):
+                response.headers["Cache-Control"] = "no-cache"
+            return response
+
         @app.get("/")
         def page() -> FileResponse:
             return FileResponse(WEB / "index.html")
