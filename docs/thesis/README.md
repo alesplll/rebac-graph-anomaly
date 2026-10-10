@@ -19,6 +19,7 @@
 | `sensitivity.md` | Сетка 3×3 по глубине и ширине: проверка устойчивости, а не подбор | `uv run python scripts/sensitivity_study.py` |
 | `generalisation.md` | Скрытые паттерны, непохожие по форме на обучающие | `uv run rga evaluate --config configs/experiments/generalisation.yaml --out experiments/runs/generalisation` |
 | `two-hop.md` | На каком расстоянии стояли концы изменения до его появления | `uv run python scripts/two_hop_study.py` |
+| `timing.md` | Требования раздела 1.3.3: время перечня и обоснования, воспроизводимость первых 50 позиций | `uv run python scripts/timing_study.py` |
 
 Начинать стоит с `docs/findings.md` — там собрано, что утверждается, каким числом
 и в каком из документов ниже это разобрано.
