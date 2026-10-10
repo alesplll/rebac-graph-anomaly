@@ -2,6 +2,8 @@
 
 from pathlib import Path
 
+from rga.domain.events import EventOp, GraphEvent
+from rga.domain.relations import PermissionLevel, RelationType
 from rga.domain.replay import replay
 from rga.features.build import Span, build_candidates, candidates_from_events
 from rga.generator.config import load_dataset_config
@@ -61,3 +63,44 @@ def test_a_narrower_window_yields_fewer_candidates() -> None:
     )
 
     assert narrow.n_candidates < wide.n_candidates
+
+
+def test_changes_made_by_platform_automation_are_not_candidates() -> None:
+    """The platform writing a permission after an upload is not anyone's decision."""
+    grant = PermissionLevel.WRITE
+    events = [
+        GraphEvent(
+            1, EventOp.GRANT, "user:a", RelationType.HAS_PERMISSION, "bucket:x", grant, "user:root"
+        ),
+        GraphEvent(
+            2,
+            EventOp.GRANT,
+            "user:a",
+            RelationType.HAS_PERMISSION,
+            "bucket:y",
+            grant,
+            "user:system",
+        ),
+        GraphEvent(
+            3,
+            EventOp.GRANT,
+            "user:b",
+            RelationType.HAS_PERMISSION,
+            "bucket:x",
+            grant,
+            "user:ops-bot",
+        ),
+    ]
+
+    default = candidates_from_events(events, start=0, end=10, graph=replay([]))
+    custom = candidates_from_events(
+        events,
+        start=0,
+        end=10,
+        graph=replay([]),
+        automation_actors=frozenset({"user:system", "user:ops-bot"}),
+    )
+
+    assert [key[2] for key in default.keys] == ["bucket:x", "bucket:x"]
+    assert default.actors == ("user:root", "user:ops-bot")
+    assert custom.actors == ("user:root",)
