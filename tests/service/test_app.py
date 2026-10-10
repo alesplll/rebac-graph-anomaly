@@ -93,6 +93,29 @@ def test_a_card_carries_its_grounds(client) -> None:
     assert card["subgraph"]["nodes"]
 
 
+def test_the_queue_can_be_filtered_by_relation(client) -> None:
+    everything = client.get("/api/incidents", params={"limit": 500}).json()["incidents"]
+    relations = {item["relation"] for item in everything}
+    assert len(relations) > 1, "a filter over a single relation would prove nothing"
+
+    filtered = client.get("/api/incidents", params={"limit": 500, "relation": "MEMBER_OF"}).json()[
+        "incidents"
+    ]
+
+    assert filtered
+    assert {item["relation"] for item in filtered} == {"MEMBER_OF"}
+
+
+def test_the_queue_can_be_narrowed_to_changes_since_a_moment(client) -> None:
+    everything = client.get("/api/incidents", params={"limit": 500}).json()["incidents"]
+    middle = sorted(item["ts"] for item in everything)[len(everything) // 2]
+
+    later = client.get("/api/incidents", params={"limit": 500, "since": middle}).json()["incidents"]
+
+    assert 0 < len(later) < len(everything)
+    assert min(item["ts"] for item in later) >= middle
+
+
 def test_an_unknown_card_is_a_clean_404(client) -> None:
     assert client.get("/api/incidents/" + "0" * 16).status_code == 404
 
